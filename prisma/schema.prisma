@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  dong         String        @default("") // 동 (예: 101)
+  ho           String        @default("") // 호수 (예: 1001)
+  role         Role          @default(USER)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  reservations Reservation[]
+
+  @@unique([dong, ho])
+}
+
+model Reservation {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime // UTC midnight of reservation day
+  startHour       Int      // 0-23
+  endHour         Int      // startHour + 1
+  isSameDayBooking Boolean @default(false) // true = 21:00 이후 익일 추가 예약
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // DB-level duplicate prevention: one slot per date+hour
+  @@unique([date, startHour])
+  @@index([userId, date])
+  @@index([date])
+}
