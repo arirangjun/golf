@@ -45,10 +45,11 @@ npm run dev
 
 코드를 GitHub에 푸시하면 **GitHub Actions CI**가 자동으로 실행됩니다 (lint + build).
 
-### 1. GitHub에서 저장소 생성
+### 1. GitHub 저장소
 
-1. [GitHub](https://github.com/new)에서 새 저장소 생성 (예: `golf`)
-2. README 추가 없이 **빈 저장소**로 생성
+이 프로젝트 저장소: **[github.com/arirangjun/golf](https://github.com/arirangjun/golf)**
+
+새 프로젝트를 연결할 경우 [GitHub](https://github.com/new)에서 빈 저장소를 생성합니다.
 
 ### 2. 로컬 연결 및 푸시
 
@@ -56,7 +57,7 @@ npm run dev
 
 ```powershell
 cd D:\golf
-.\scripts\push-to-github.ps1 -RepoUrl "https://github.com/사용자명/golf.git"
+.\scripts\push-to-github.ps1 -RepoUrl "https://github.com/arirangjun/golf.git"
 git commit -m "Initial commit: screen golf reservation PWA"
 git push -u origin main
 ```
@@ -66,7 +67,7 @@ git push -u origin main
 ```bash
 git init
 git branch -M main
-git remote add origin https://github.com/사용자명/golf.git
+git remote add origin https://github.com/arirangjun/golf.git
 git add .
 git commit -m "Initial commit: screen golf reservation PWA"
 git push -u origin main
