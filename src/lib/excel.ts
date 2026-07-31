@@ -3,16 +3,16 @@ import { formatHour } from "./utils";
 import type { ImportRow } from "./member-service";
 import type { MonthlyMemberStat } from "./reservation-service";
 
-const MEMBER_HEADERS = ["동", "호수", "이름"] as const;
+const MEMBER_HEADERS = ["동", "호수", "이름", "휴대폰"] as const;
 
 export function buildMemberTemplateBuffer(): Buffer {
   const rows = [
     [...MEMBER_HEADERS],
-    ["101", "1001", "홍길동"],
-    ["102", "2001", "김철수"],
+    ["101", "1001", "홍길동", "01012345678"],
+    ["102", "2001", "김철수", "01098765432"],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 12 }];
+  ws["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "회원등록");
   return Buffer.from(
@@ -54,11 +54,25 @@ export function parseMemberExcel(buffer: Buffer): ImportRow[] {
   const nameIdx = headerRow.findIndex(
     (h) => h === "이름" || h === "name" || h === "성명"
   );
+  const phoneIdx = headerRow.findIndex(
+    (h) =>
+      h === "휴대폰" ||
+      h === "휴대폰번호" ||
+      h === "phone" ||
+      h === "연락처" ||
+      h === "전화번호"
+  );
 
-  const useHeader =
-    dongIdx >= 0 && hoIdx >= 0 && nameIdx >= 0
-      ? { dong: dongIdx, ho: hoIdx, name: nameIdx, start: 1 }
-      : { dong: 0, ho: 1, name: 2, start: 0 };
+  const hasHeader = dongIdx >= 0 && hoIdx >= 0 && nameIdx >= 0;
+  const useHeader = hasHeader
+    ? {
+        dong: dongIdx,
+        ho: hoIdx,
+        name: nameIdx,
+        phone: phoneIdx,
+        start: 1,
+      }
+    : { dong: 0, ho: 1, name: 2, phone: 3, start: 0 };
 
   const result: ImportRow[] = [];
 
@@ -69,14 +83,17 @@ export function parseMemberExcel(buffer: Buffer): ImportRow[] {
     const dong = cellValue(row, useHeader.dong);
     const ho = cellValue(row, useHeader.ho);
     const name = cellValue(row, useHeader.name);
+    const phone =
+      useHeader.phone >= 0 ? cellValue(row, useHeader.phone) : "";
 
-    if (!dong && !ho && !name) continue;
+    if (!dong && !ho && !name && !phone) continue;
 
     result.push({
       row: i + 1,
       dong,
       ho,
       name,
+      phone,
     });
   }
 
@@ -166,11 +183,12 @@ export function buildStatsExportBuffer(data: StatsExportData): Buffer {
     XLSX.utils.book_append_sheet(
       wb,
       XLSX.utils.aoa_to_sheet([
-        ["순위", "동", "이름(마스킹)", "예약 횟수"],
+        ["순위", "동", "이름(마스킹)", "휴대폰", "예약 횟수"],
         ...data.memberStats.members.map((m, idx) => [
           idx + 1,
           m.dong,
           m.displayName,
+          m.phone,
           m.count,
         ]),
       ]),

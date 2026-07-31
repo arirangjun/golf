@@ -6,8 +6,10 @@ import {
   apiErrorResponse,
   ApiError,
   formatMemberDisplay,
+  formatPhone,
   formatUnit,
   generateMemberEmail,
+  normalizePhone,
 } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 
@@ -15,6 +17,7 @@ const updateSchema = z.object({
   name: z.string().min(1).optional(),
   dong: z.string().min(1).optional(),
   ho: z.string().min(1).optional(),
+  phone: z.string().optional(),
   password: z.string().min(1).optional(),
   role: z.enum(["USER", "ADMIN"]).optional(),
   isActive: z.boolean().optional(),
@@ -65,6 +68,9 @@ export async function PATCH(
     if (current.role === "USER" && (data.dong || data.ho)) {
       updateData.email = generateMemberEmail(newDong, newHo);
     }
+    if (data.phone !== undefined) {
+      updateData.phone = normalizePhone(data.phone);
+    }
     if (password) {
       updateData.passwordHash = await bcrypt.hash(password, 10);
     }
@@ -76,6 +82,7 @@ export async function PATCH(
         id: true,
         email: true,
         name: true,
+        phone: true,
         dong: true,
         ho: true,
         role: true,
@@ -86,6 +93,7 @@ export async function PATCH(
     return Response.json({
       user: {
         ...user,
+        phone: formatPhone(user.phone),
         unitLabel: formatUnit(user.dong, user.ho),
         displayName: formatMemberDisplay(user.dong, user.name),
       },

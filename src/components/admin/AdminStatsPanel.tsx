@@ -28,6 +28,7 @@ interface MonthlyMemberStats {
     userId: string;
     dong: string;
     name: string;
+    phone: string;
     displayName: string;
     count: number;
   }[];
@@ -176,6 +177,7 @@ export function AdminStatsPanel() {
                     <tr>
                       <th className="px-4 py-2 font-medium">순위</th>
                       <th className="px-4 py-2 font-medium">회원 (동/이름)</th>
+                      <th className="px-4 py-2 font-medium">휴대폰</th>
                       <th className="px-4 py-2 font-medium">예약 횟수</th>
                     </tr>
                   </thead>
@@ -184,6 +186,7 @@ export function AdminStatsPanel() {
                       <tr key={m.userId} className="hover:bg-gray-50">
                         <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
                         <td className="px-4 py-2 font-medium text-gray-900">{m.displayName}</td>
+                        <td className="px-4 py-2 text-gray-600">{m.phone || "-"}</td>
                         <td className="px-4 py-2">{m.count}회</td>
                       </tr>
                     ))}

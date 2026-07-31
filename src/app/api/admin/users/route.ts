@@ -2,13 +2,14 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
-import { apiErrorResponse, formatMemberDisplay, formatUnit } from "@/lib/utils";
+import { apiErrorResponse, formatMemberDisplay, formatPhone, formatUnit } from "@/lib/utils";
 import { createMember } from "@/lib/member-service";
 
 const createSchema = z.object({
   name: z.string().min(1, "이름을 입력해 주세요."),
   dong: z.string().min(1, "동을 입력해 주세요."),
   ho: z.string().min(1, "호수를 입력해 주세요."),
+  phone: z.string().optional(),
 });
 
 export async function GET() {
@@ -19,6 +20,7 @@ export async function GET() {
         id: true,
         email: true,
         name: true,
+        phone: true,
         dong: true,
         ho: true,
         role: true,
@@ -34,6 +36,7 @@ export async function GET() {
         id: u.id,
         email: u.email,
         name: u.name,
+        phone: formatPhone(u.phone),
         dong: u.dong,
         ho: u.ho,
         unitLabel: formatUnit(u.dong, u.ho),
@@ -53,9 +56,9 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
     const body = await request.json();
-    const { name, dong, ho } = createSchema.parse(body);
+    const { name, dong, ho, phone } = createSchema.parse(body);
 
-    const user = await createMember({ name, dong, ho });
+    const user = await createMember({ name, dong, ho, phone });
 
     return Response.json(
       {

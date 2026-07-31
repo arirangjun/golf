@@ -27,6 +27,7 @@ async function main() {
     update: {
       dong: "101",
       ho: "1001",
+      phone: "01012345678",
       passwordHash: memberPassword,
       name: "홍길동",
     },
@@ -34,6 +35,7 @@ async function main() {
       email: memberEmail,
       passwordHash: memberPassword,
       name: "홍길동",
+      phone: "01012345678",
       dong: "101",
       ho: "1001",
       role: Role.USER,

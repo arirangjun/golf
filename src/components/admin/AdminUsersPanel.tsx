@@ -7,6 +7,7 @@ interface AdminUser {
   id: string;
   email: string;
   name: string;
+  phone: string;
   dong: string;
   ho: string;
   unitLabel: string;
@@ -20,6 +21,7 @@ const emptyForm = {
   name: "",
   dong: "",
   ho: "",
+  phone: "",
 };
 
 export function AdminUsersPanel() {
@@ -32,6 +34,7 @@ export function AdminUsersPanel() {
     name: "",
     dong: "",
     ho: "",
+    phone: "",
     password: "",
   });
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
@@ -122,6 +125,7 @@ export function AdminUsersPanel() {
       name?: string;
       dong?: string;
       ho?: string;
+      phone?: string;
       password?: string;
     }
   ) => {
@@ -147,6 +151,7 @@ export function AdminUsersPanel() {
       name: user.name,
       dong: user.dong,
       ho: user.ho,
+      phone: user.phone,
       password: "",
     });
   };
@@ -159,6 +164,7 @@ export function AdminUsersPanel() {
       name: editForm.name,
       dong: editForm.dong,
       ho: editForm.ho,
+      phone: editForm.phone,
     };
     if (editForm.password) patch.password = editForm.password;
 
@@ -194,7 +200,7 @@ export function AdminUsersPanel() {
           </div>
         )}
 
-        <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <label className="mb-1 block text-xs text-gray-500">동</label>
             <input
@@ -225,6 +231,15 @@ export function AdminUsersPanel() {
               required
             />
           </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">휴대폰</label>
+            <input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              placeholder="01012345678"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            />
+          </div>
           <div className="flex items-end">
             <button
               type="submit"
@@ -239,7 +254,7 @@ export function AdminUsersPanel() {
         <div className="mt-6 border-t pt-6">
           <h4 className="mb-1 text-sm font-semibold text-gray-900">엑셀 일괄 등록</h4>
           <p className="mb-3 text-xs text-gray-500">
-            양식: <strong>동 · 호수 · 이름</strong> (초기 비밀번호 1 자동 설정)
+            양식: <strong>동 · 호수 · 이름 · 휴대폰</strong> (초기 비밀번호 1 자동 설정)
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -284,6 +299,7 @@ export function AdminUsersPanel() {
             <tr>
               <th className="px-4 py-3 font-medium">동/호수</th>
               <th className="px-4 py-3 font-medium">이름</th>
+              <th className="px-4 py-3 font-medium">휴대폰</th>
               <th className="px-4 py-3 font-medium">상태</th>
               <th className="px-4 py-3 font-medium">예약 수</th>
               <th className="px-4 py-3 font-medium">관리</th>
@@ -292,7 +308,7 @@ export function AdminUsersPanel() {
           <tbody className="divide-y">
             {members.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                   등록된 회원이 없습니다. 위에서 회원을 등록해 주세요.
                 </td>
               </tr>
@@ -301,6 +317,7 @@ export function AdminUsersPanel() {
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium">{user.unitLabel}</td>
                   <td className="px-4 py-3">{user.displayName.replace(/^[^\s]+\s/, "")}</td>
+                  <td className="px-4 py-3 text-gray-600">{user.phone || "-"}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -394,6 +411,15 @@ export function AdminUsersPanel() {
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                   className="w-full rounded-lg border px-3 py-2 text-sm"
                   required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">휴대폰</label>
+                <input
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  placeholder="01012345678"
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
                 />
               </div>
               <div>

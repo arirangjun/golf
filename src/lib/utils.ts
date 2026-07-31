@@ -53,6 +53,24 @@ export function formatUnit(dong: string, ho: string): string {
 export function generateMemberEmail(dong: string, ho: string): string {
   return `${dong.trim()}-${ho.trim()}@member.golf`;
 }
+
+export function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+export function formatPhone(phone: string): string {
+  if (!phone) return "";
+  const digits = normalizePhone(phone);
+  if (digits.length === 11) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return phone;
+}
+
+/** 이름 중간 글자 마스킹 (예: 홍길동 → 홍*동) */
 export function maskName(name: string): string {
   const trimmed = name.trim();
   if (trimmed.length <= 1) return trimmed;

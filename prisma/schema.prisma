@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -17,8 +17,9 @@ model User {
   email        String        @unique
   passwordHash String
   name         String
-  dong         String        @default("") // 동 (예: 101)
-  ho           String        @default("") // 호수 (예: 1001)
+  phone        String        @default("")
+  dong         String        @default("")
+  ho           String        @default("")
   role         Role          @default(USER)
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
@@ -29,17 +30,16 @@ model User {
 }
 
 model Reservation {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date            DateTime // UTC midnight of reservation day
-  startHour       Int      // 0-23
-  endHour         Int      // startHour + 1
-  isSameDayBooking Boolean @default(false) // true = 21:00 이후 익일 추가 예약
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date             DateTime
+  startHour        Int
+  endHour          Int
+  isSameDayBooking Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  // DB-level duplicate prevention: one slot per date+hour
   @@unique([date, startHour])
   @@index([userId, date])
   @@index([date])

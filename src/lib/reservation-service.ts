@@ -7,6 +7,7 @@ import {
   formatDate,
   formatHour,
   formatMemberDisplay,
+  formatPhone,
   getAllDayHours,
   getWeekRange,
   isOperatingHour,
@@ -290,6 +291,7 @@ export interface MonthlyMemberStat {
   userId: string;
   dong: string;
   name: string;
+  phone: string;
   displayName: string;
   count: number;
 }
@@ -311,13 +313,13 @@ export async function getMonthlyMemberStats(
       date: { gte: toDateOnly(monthStart), lte: toDateOnly(monthEnd) },
     },
     include: {
-      user: { select: { id: true, name: true, dong: true } },
+      user: { select: { id: true, name: true, dong: true, phone: true } },
     },
   });
 
   const memberMap = new Map<
     string,
-    { dong: string; name: string; count: number }
+    { dong: string; name: string; phone: string; count: number }
   >();
 
   for (const r of reservations) {
@@ -328,16 +330,18 @@ export async function getMonthlyMemberStats(
       memberMap.set(r.userId, {
         dong: r.user.dong,
         name: r.user.name,
+        phone: r.user.phone,
         count: 1,
       });
     }
   }
 
   const members = Array.from(memberMap.entries())
-    .map(([userId, { dong, name, count }]) => ({
+    .map(([userId, { dong, name, phone, count }]) => ({
       userId,
       dong,
       name,
+      phone: formatPhone(phone),
       displayName: formatMemberDisplay(dong, name),
       count,
     }))

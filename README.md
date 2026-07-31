@@ -7,7 +7,7 @@ Next.js App Router 기반 스크린골프 타임슬롯 예약 시스템입니다
 - **Next.js 15** (App Router)
 - **TypeScript**
 - **Tailwind CSS**
-- **Prisma ORM** (SQLite)
+- **Prisma ORM** (PostgreSQL)
 - **PWA** (manifest + Service Worker)
 
 ## 예약 규칙
@@ -26,10 +26,13 @@ Next.js App Router 기반 스크린골프 타임슬롯 예약 시스템입니다
 
 ## 시작하기
 
+PostgreSQL이 필요합니다. [Neon](https://neon.tech) 무료 DB를 사용할 수 있습니다.
+
 ```bash
 npm install
 cp .env.example .env
-npm run db:push
+# .env 에 DATABASE_URL, JWT_SECRET 설정
+npm run db:migrate:deploy
 npm run db:seed
 npm run dev
 ```
@@ -83,4 +86,38 @@ git push
 
 `main` 브랜치에 푸시할 때마다 `.github/workflows/ci.yml`이 실행되어 빌드 검증이 진행됩니다.
 
-> **참고:** `.env`와 `prisma/dev.db`는 `.gitignore`에 포함되어 GitHub에 올라가지 않습니다. 배포 시 `DATABASE_URL`, `JWT_SECRET` 환경 변수를 별도 설정하세요.
+> **참고:** `.env`는 GitHub에 올라가지 않습니다. 배포 시 `DATABASE_URL`, `JWT_SECRET` 환경 변수를 설정하세요.
+
+## Vercel 배포
+
+### 1. PostgreSQL 준비 (Neon)
+
+1. [Neon](https://neon.tech)에서 프로젝트 생성
+2. Connection string 복사 (`postgresql://...?sslmode=require`)
+
+### 2. Vercel 연결
+
+1. [Vercel](https://vercel.com) → **Add New Project**
+2. GitHub `arirangjun/golf` 저장소 Import
+3. **Environment Variables** 설정:
+
+| 변수 | 값 |
+|------|-----|
+| `DATABASE_URL` | Neon PostgreSQL URL |
+| `JWT_SECRET` | 랜덤 문자열 (32자 이상) |
+
+4. **Deploy** 클릭
+
+배포 시 `prisma migrate deploy`가 자동 실행되어 DB 스키마가 생성됩니다.
+
+### 3. 최초 시드 (1회)
+
+배포 후 로컬에서 Neon URL로 시드 실행:
+
+```bash
+DATABASE_URL="postgresql://..." npm run db:seed
+```
+
+### 배포 URL
+
+Vercel 대시보드에서 `https://golf-xxx.vercel.app` 형태의 URL을 확인할 수 있습니다.
