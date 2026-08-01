@@ -6,6 +6,13 @@ import {
   addDays,
   isSameDay,
   format,
+  previousSaturday,
+  nextSaturday,
+  isSaturday,
+  setHours,
+  setMinutes,
+  setSeconds,
+  setMilliseconds,
 } from "date-fns";
 import { ko } from "date-fns/locale";
 
@@ -15,12 +22,68 @@ export const OPERATING_END_HOUR = 24;
 /** After 21:00, one bonus booking for the next day is allowed */
 export const NEXT_DAY_BONUS_START_HOUR = 21;
 export const CANCELLATION_HOURS_BEFORE = 3;
+/** Every Saturday at 14:00, the following Mon–Sun week opens for booking */
+export const BOOKING_OPEN_HOUR = 14;
 
 export function getWeekRange(date: Date): { start: Date; end: Date } {
   return {
     start: startOfWeek(date, { weekStartsOn: 1 }), // Monday
     end: endOfWeek(date, { weekStartsOn: 1 }), // Sunday
   };
+}
+
+function getSaturdayBookingOpenTime(saturday: Date): Date {
+  return setMilliseconds(
+    setSeconds(setMinutes(setHours(toDateOnly(saturday), BOOKING_OPEN_HOUR), 0), 0),
+    0
+  );
+}
+
+/** Currently open bookable week (Mon–Sun), opened at the most recent Sat 14:00 */
+export function getCurrentlyBookableWeekRange(
+  now: Date = new Date()
+): { start: Date; end: Date } | null {
+  let saturday = isSaturday(now) ? toDateOnly(now) : previousSaturday(now);
+  let openTime = getSaturdayBookingOpenTime(saturday);
+
+  if (now < openTime) {
+    saturday = addDays(saturday, -7);
+    openTime = getSaturdayBookingOpenTime(saturday);
+  }
+
+  const weekStart = addDays(saturday, 2);
+  return getWeekRange(weekStart);
+}
+
+/** When the next booking window opens (next Sat 14:00, or today if not yet open) */
+export function getNextBookingOpenTime(now: Date = new Date()): Date {
+  let saturday = isSaturday(now) ? toDateOnly(now) : nextSaturday(now);
+  let openTime = getSaturdayBookingOpenTime(saturday);
+
+  if (isSaturday(now) && now >= openTime) {
+    saturday = addDays(saturday, 7);
+    openTime = getSaturdayBookingOpenTime(saturday);
+  }
+
+  return openTime;
+}
+
+export function canBookDate(date: Date, now: Date = new Date()): boolean {
+  const range = getCurrentlyBookableWeekRange(now);
+  if (!range) return false;
+
+  const dateOnly = toDateOnly(date);
+  return dateOnly >= range.start && dateOnly <= range.end;
+}
+
+export function formatBookingWindowMessage(now: Date = new Date()): string {
+  const range = getCurrentlyBookableWeekRange(now);
+  if (!range) {
+    const nextOpen = getNextBookingOpenTime(now);
+    return `예약 오픈: ${format(nextOpen, "M월 d일 (EEE) HH:mm", { locale: ko })}부터`;
+  }
+
+  return `예약 가능 주간: ${format(range.start, "M/d", { locale: ko })} ~ ${format(range.end, "M/d", { locale: ko })} (매주 토요일 ${BOOKING_OPEN_HOUR}:00 오픈)`;
 }
 
 export function toDateOnly(date: Date): Date {
@@ -141,6 +204,7 @@ export type ApiErrorCode =
   | "WEEKLY_LIMIT"
   | "BONUS_LIMIT"
   | "CANCEL_TOO_LATE"
+  | "BOOKING_NOT_OPEN"
   | "USER_INACTIVE"
   | "INTERNAL_ERROR";
 

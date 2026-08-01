@@ -12,6 +12,10 @@ import {
   getWeekRange,
   isOperatingHour,
   isNextDayBonusBookingAllowed,
+  canBookDate,
+  getCurrentlyBookableWeekRange,
+  getNextBookingOpenTime,
+  formatBookingWindowMessage,
   toDateOnly,
   getReservationDateTime,
   OPERATING_START_HOUR,
@@ -23,6 +27,7 @@ export interface SlotInfo {
   endHour: number;
   available: boolean;
   isOperating: boolean;
+  bookable: boolean;
   reservationId?: string;
   displayLabel?: string;
   isMine?: boolean;
@@ -30,7 +35,8 @@ export interface SlotInfo {
 
 export async function getSlotsForDate(
   date: Date,
-  currentUserId?: string
+  currentUserId?: string,
+  options?: { adminView?: boolean }
 ): Promise<SlotInfo[]> {
   const dateOnly = toDateOnly(date);
   const reservations = await prisma.reservation.findMany({
@@ -41,6 +47,7 @@ export async function getSlotsForDate(
   const bookedMap = new Map(
     reservations.map((r) => [r.startHour, r])
   );
+  const bookable = options?.adminView ? true : canBookDate(dateOnly);
 
   return getAllDayHours().map((hour) => {
     const reservation = bookedMap.get(hour);
@@ -48,8 +55,9 @@ export async function getSlotsForDate(
     return {
       startHour: hour,
       endHour: hour + 1,
-      available: operating && !reservation,
+      available: operating && !reservation && bookable,
       isOperating: operating,
+      bookable,
       reservationId: reservation?.id,
       displayLabel: reservation
         ? formatMemberDisplay(reservation.user.dong, reservation.user.name)
@@ -66,14 +74,15 @@ export interface DaySlots {
 
 export async function getSlotsForWeek(
   weekStart: Date,
-  currentUserId?: string
+  currentUserId?: string,
+  options?: { adminView?: boolean }
 ): Promise<DaySlots[]> {
   const monday = toDateOnly(weekStart);
   const days: DaySlots[] = [];
 
   for (let i = 0; i < 7; i++) {
     const date = addDays(monday, i);
-    const slots = await getSlotsForDate(date, currentUserId);
+    const slots = await getSlotsForDate(date, currentUserId, options);
     days.push({ date: formatDate(date), slots });
   }
 
@@ -122,6 +131,21 @@ export async function createReservation(
   const reservationTime = getReservationDateTime(dateOnly, startHour);
   if (reservationTime <= now && !isAdmin) {
     throw new ApiError("VALIDATION_ERROR", "과거 시간은 예약할 수 없습니다.");
+  }
+
+  if (!isAdmin && !canBookDate(dateOnly, now)) {
+    const range = getCurrentlyBookableWeekRange(now);
+    if (range) {
+      throw new ApiError(
+        "BOOKING_NOT_OPEN",
+        `현재 예약 가능한 주간은 ${formatDate(range.start)} ~ ${formatDate(range.end)} 입니다. 매주 토요일 14:00에 다음 주 예약이 오픈됩니다.`
+      );
+    }
+    const nextOpen = getNextBookingOpenTime(now);
+    throw new ApiError(
+      "BOOKING_NOT_OPEN",
+      `예약 오픈 전입니다. ${formatDate(nextOpen)} ${formatHour(nextOpen.getHours())}부터 예약 가능합니다.`
+    );
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId } });

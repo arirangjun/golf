@@ -15,7 +15,8 @@ Next.js App Router 기반 스크린골프 타임슬롯 예약 시스템입니다
 | 규칙 | 설명 |
 |------|------|
 | 기본 예약 | 회원당 주간(월~일) 1회, 1시간(1슬롯) |
-| 익일 추가 예약 | 21:00 이후 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시) |
+| 예약 오픈 | 매주 토요일 14:00부터 다음 주(월~일)만 예약 가능 |
+| 익일 추가 예약 | 21:00 이후 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 오픈 주간 내) |
 | 취소 제한 | 예약 3시간 전까지만 취소 가능 |
 | 운영 시간 | 00:00 ~ 24:00 (1시간 단위, 24슬롯) |
 
@@ -28,10 +29,24 @@ Next.js App Router 기반 스크린골프 타임슬롯 예약 시스템입니다
 
 PostgreSQL이 필요합니다. [Neon](https://neon.tech) 무료 DB를 사용할 수 있습니다.
 
+**로컬 개발 (SQLite, 별도 DB 설치 불필요):**
+
 ```bash
 npm install
 cp .env.example .env
-# .env 에 DATABASE_URL, JWT_SECRET 설정
+npm run db:setup:local   # 최초 1회 또는 schema 변경 후
+npm run dev
+```
+
+> `npm run dev` 실행 시 `EPERM` 오류가 나면, 이미 실행 중인 개발 서버를 종료한 뒤 다시 실행하세요.  
+> Prisma schema를 수정했다면 `npm run db:generate:local`을 먼저 실행하세요.
+
+**배포 / PostgreSQL:**
+
+```bash
+npm install
+cp .env.example .env
+# .env 에 PostgreSQL DATABASE_URL, JWT_SECRET 설정
 npm run db:migrate:deploy
 npm run db:seed
 npm run dev

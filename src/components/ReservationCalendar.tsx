@@ -17,6 +17,7 @@ interface Slot {
   endHour: number;
   available: boolean;
   isOperating: boolean;
+  bookable?: boolean;
   reservationId?: string;
   displayLabel?: string;
   isMine?: boolean;
@@ -50,15 +51,9 @@ function isPastSlot(dateStr: string, hour: number): boolean {
 }
 
 export function ReservationCalendar() {
-  const [weekStart, setWeekStart] = useState(() => {
-    const today = new Date();
-    const day = today.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + diff);
-    return format(startOfDay(monday), "yyyy-MM-dd");
-  });
+  const [weekStart, setWeekStart] = useState<string | null>(null);
   const [weekDays, setWeekDays] = useState<DaySlots[]>([]);
+  const [bookingWindowMessage, setBookingWindowMessage] = useState("");
   const [myReservations, setMyReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
@@ -68,9 +63,18 @@ export function ReservationCalendar() {
   const fetchWeek = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/slots/week?weekStart=${weekStart}`);
+      const url = weekStart
+        ? `/api/slots/week?weekStart=${weekStart}`
+        : "/api/slots/week";
+      const res = await fetch(url);
       const data = await res.json();
-      if (res.ok) setWeekDays(data.days);
+      if (res.ok) {
+        setWeekDays(data.days);
+        setBookingWindowMessage(data.bookingWindowMessage ?? "");
+        if (!weekStart && data.weekStart) {
+          setWeekStart(data.weekStart);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -161,8 +165,12 @@ export function ReservationCalendar() {
     if (!slot) return "bg-gray-50";
     if (isPastSlot(date, slot.startHour)) return "bg-gray-50 cursor-not-allowed opacity-50";
     if (slot.isMine) return "bg-primary-100 border-primary-400 cursor-pointer hover:bg-primary-200";
-    if (!slot.available)
+    if (!slot.available) {
+      if (slot.isOperating && slot.bookable === false) {
+        return "bg-gray-100 border-gray-200 cursor-not-allowed opacity-60";
+      }
       return "bg-red-50 border-red-100 cursor-not-allowed";
+    }
     return "bg-white hover:bg-primary-50 hover:border-primary-300 cursor-pointer";
   };
 
@@ -180,8 +188,12 @@ export function ReservationCalendar() {
           <h2 className="text-lg font-semibold text-gray-900">주간 예약 현황</h2>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setWeekStart(format(subWeeks(parseISO(weekStart), 1), "yyyy-MM-dd"))}
-              className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50"
+              onClick={() =>
+                weekStart &&
+                setWeekStart(format(subWeeks(parseISO(weekStart), 1), "yyyy-MM-dd"))
+              }
+              disabled={!weekStart}
+              className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
             >
               ← 이전 주
             </button>
@@ -189,8 +201,12 @@ export function ReservationCalendar() {
               {weekLabel}
             </span>
             <button
-              onClick={() => setWeekStart(format(addWeeks(parseISO(weekStart), 1), "yyyy-MM-dd"))}
-              className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50"
+              onClick={() =>
+                weekStart &&
+                setWeekStart(format(addWeeks(parseISO(weekStart), 1), "yyyy-MM-dd"))
+              }
+              disabled={!weekStart}
+              className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
             >
               다음 주 →
             </button>
@@ -221,13 +237,18 @@ export function ReservationCalendar() {
             <span className="inline-block h-3 w-3 rounded border bg-red-50" /> 예약됨
           </span>
           <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded border bg-gray-100" /> 예약 오픈 전
+          </span>
+          <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded bg-gray-50" /> 과거 시간
           </span>
         </div>
 
         <div className="mb-3 rounded-lg bg-blue-50 px-4 py-3 text-xs text-blue-800">
+          {bookingWindowMessage && <p className="mb-1 font-medium">• {bookingWindowMessage}</p>}
+          <p>• 매주 토요일 14:00부터 다음 주(월~일)만 예약 가능</p>
           <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 00:00~24:00 전 시간대 예약 가능</p>
-          <p>• 21:00 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시)</p>
+          <p>• 21:00 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
           <p>• 취소: 예약 3시간 전까지 · 내 예약 셀 클릭으로 취소</p>
         </div>
 
@@ -282,7 +303,9 @@ export function ReservationCalendar() {
                               ? "클릭하여 취소"
                               : slot?.available
                                 ? "클릭하여 예약"
-                                : slot?.displayLabel ?? "예약 불가"
+                                : slot?.bookable === false
+                                  ? "예약 오픈 전"
+                                  : slot?.displayLabel ?? "예약 불가"
                           }
                           className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
                         >
