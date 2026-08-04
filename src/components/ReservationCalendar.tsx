@@ -285,7 +285,7 @@ export function ReservationCalendar() {
                     <div className="sticky left-0 z-[1] flex items-center justify-center border-r bg-gray-50 px-1 py-0 text-[11px] font-medium text-gray-500">
                       {formatHour(hour)}
                     </div>
-                    {weekDays.map((day) => {
+                    {weekDays.map((day, dayIdx) => {
                       const slot = slotMap.get(`${day.date}-${hour}`);
                       const label = getCellLabel(slot);
                       const clickable =
@@ -309,9 +309,13 @@ export function ReservationCalendar() {
                           }
                           className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
                         >
+                          <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[9px] text-gray-400/35 select-none sm:text-[10px]">
+                            <span>{DAY_LABELS[dayIdx]}</span>
+                            <span>{formatHour(hour)}</span>
+                          </span>
                           {label && (
                             <span
-                              className={`block truncate font-medium ${
+                              className={`relative z-[1] block truncate font-medium ${
                                 slot?.isMine ? "text-primary-700" : "text-red-600"
                               }`}
                             >
