@@ -8,10 +8,13 @@ import {
   formatMemberDisplay,
   formatPhone,
   formatUnit,
-  generateMemberEmail,
   normalizePhone,
 } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
+import {
+  countMembersWithUnitPassword,
+  generateUniqueMemberEmail,
+} from "@/lib/member-auth";
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -48,30 +51,26 @@ export async function PATCH(
     const newDong = data.dong?.trim() ?? current.dong;
     const newHo = data.ho?.trim() ?? current.ho;
 
-    if (current.role === "USER" && (data.dong || data.ho)) {
-      const duplicate = await prisma.user.findFirst({
-        where: {
-          dong: newDong,
-          ho: newHo,
-          NOT: { id },
-        },
-      });
-      if (duplicate) {
-        throw new ApiError("VALIDATION_ERROR", "이미 등록된 동·호수입니다.");
-      }
-    }
-
     const { password, ...rest } = data;
     const updateData: Record<string, unknown> = { ...rest };
     if (data.dong) updateData.dong = newDong;
     if (data.ho) updateData.ho = newHo;
-    if (current.role === "USER" && (data.dong || data.ho)) {
-      updateData.email = generateMemberEmail(newDong, newHo);
-    }
     if (data.phone !== undefined) {
       updateData.phone = normalizePhone(data.phone);
     }
     if (password) {
+      const duplicatePasswordCount = await countMembersWithUnitPassword(
+        newDong,
+        newHo,
+        password,
+        id
+      );
+      if (duplicatePasswordCount > 0) {
+        throw new ApiError(
+          "VALIDATION_ERROR",
+          "같은 동·호수에 이미 동일 비밀번호를 사용하는 회원이 있습니다."
+        );
+      }
       updateData.passwordHash = await bcrypt.hash(password, 10);
     }
 

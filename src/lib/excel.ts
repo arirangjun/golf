@@ -3,16 +3,17 @@ import { formatHour } from "./utils";
 import type { ImportRow } from "./member-service";
 import type { MonthlyMemberStat } from "./reservation-service";
 
-const MEMBER_HEADERS = ["동", "호수", "이름", "휴대폰"] as const;
+const MEMBER_HEADERS = ["동", "호수", "이름", "휴대폰", "비밀번호"] as const;
 
 export function buildMemberTemplateBuffer(): Buffer {
   const rows = [
     [...MEMBER_HEADERS],
-    ["101", "1001", "홍길동", "01012345678"],
-    ["102", "2001", "김철수", "01098765432"],
+    ["101", "1001", "홍길동", "01012345678", "1"],
+    ["101", "1001", "김영희", "01098765432", "2"],
+    ["102", "2001", "김철수", "01055556666", "1"],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }];
+  ws["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 10 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "회원등록");
   return Buffer.from(
@@ -62,6 +63,9 @@ export function parseMemberExcel(buffer: Buffer): ImportRow[] {
       h === "연락처" ||
       h === "전화번호"
   );
+  const passwordIdx = headerRow.findIndex(
+    (h) => h === "비밀번호" || h === "password" || h === "pw"
+  );
 
   const hasHeader = dongIdx >= 0 && hoIdx >= 0 && nameIdx >= 0;
   const useHeader = hasHeader
@@ -70,9 +74,10 @@ export function parseMemberExcel(buffer: Buffer): ImportRow[] {
         ho: hoIdx,
         name: nameIdx,
         phone: phoneIdx,
+        password: passwordIdx,
         start: 1,
       }
-    : { dong: 0, ho: 1, name: 2, phone: 3, start: 0 };
+    : { dong: 0, ho: 1, name: 2, phone: 3, password: 4, start: 0 };
 
   const result: ImportRow[] = [];
 
@@ -85,8 +90,10 @@ export function parseMemberExcel(buffer: Buffer): ImportRow[] {
     const name = cellValue(row, useHeader.name);
     const phone =
       useHeader.phone >= 0 ? cellValue(row, useHeader.phone) : "";
+    const password =
+      useHeader.password >= 0 ? cellValue(row, useHeader.password) : "";
 
-    if (!dong && !ho && !name && !phone) continue;
+    if (!dong && !ho && !name && !phone && !password) continue;
 
     result.push({
       row: i + 1,
@@ -94,6 +101,7 @@ export function parseMemberExcel(buffer: Buffer): ImportRow[] {
       ho,
       name,
       phone,
+      password: password || undefined,
     });
   }
 

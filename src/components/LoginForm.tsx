@@ -36,7 +36,7 @@ export function LoginForm() {
       <p className="mb-6 text-sm text-gray-500">
         {isAdminMode
           ? "관리자 계정으로 로그인합니다."
-          : "관리자가 등록한 회원만 동·호수로 로그인할 수 있습니다."}
+          : "관리자가 등록한 회원은 동·호수와 비밀번호로 로그인합니다."}
       </p>
       <form onSubmit={handleSubmit} className="space-y-4">
         {isAdminMode ? (
@@ -86,7 +86,9 @@ export function LoginForm() {
             required
           />
           {!isAdminMode && (
-            <p className="mt-1 text-xs text-gray-400">초기 비밀번호: 1</p>
+            <p className="mt-1 text-xs text-gray-400">
+              같은 동·호수에 여러 명이 있으면 비밀번호로 구분합니다.
+            </p>
           )}
         </div>
         {error && (

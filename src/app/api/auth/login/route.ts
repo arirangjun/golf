@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createSession } from "@/lib/auth";
 import { ApiError, apiErrorResponse } from "@/lib/utils";
+import { authenticateMember } from "@/lib/member-auth";
 
 const memberLoginSchema = z.object({
   loginType: z.literal("member").optional(),
@@ -44,18 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { dong, ho, password } = memberLoginSchema.parse(body);
-    const user = await prisma.user.findUnique({
-      where: { dong_ho: { dong: dong.trim(), ho: ho.trim() } },
-    });
-
-    if (!user || !user.isActive || user.role !== "USER") {
-      throw new ApiError("UNAUTHORIZED", "등록되지 않았거나 비활성화된 회원입니다.", 401);
-    }
-
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      throw new ApiError("UNAUTHORIZED", "동·호수 또는 비밀번호가 올바르지 않습니다.", 401);
-    }
+    const user = await authenticateMember(dong, ho, password);
 
     await createSession({
       id: user.id,

@@ -7,15 +7,19 @@ import {
   formatMemberDisplay,
   formatPhone,
   formatUnit,
-  generateMemberEmail,
   normalizePhone,
 } from "./utils";
+import {
+  countMembersWithUnitPassword,
+  generateUniqueMemberEmail,
+} from "./member-auth";
 
 export interface MemberInput {
   dong: string;
   ho: string;
   name: string;
   phone?: string;
+  password?: string;
 }
 
 export interface CreatedMember {
@@ -42,20 +46,26 @@ export async function createMember(input: MemberInput): Promise<CreatedMember> {
   const trimmedHo = input.ho.trim();
   const name = input.name.trim();
   const phone = toStoredPhone(input.phone);
+  const plainPassword = input.password?.trim() || DEFAULT_MEMBER_PASSWORD;
 
   if (!trimmedDong || !trimmedHo || !name) {
     throw new ApiError("VALIDATION_ERROR", "동, 호수, 이름을 모두 입력해 주세요.");
   }
 
-  const existing = await prisma.user.findUnique({
-    where: { dong_ho: { dong: trimmedDong, ho: trimmedHo } },
-  });
-  if (existing) {
-    throw new ApiError("VALIDATION_ERROR", "이미 등록된 동·호수입니다.");
+  const duplicatePasswordCount = await countMembersWithUnitPassword(
+    trimmedDong,
+    trimmedHo,
+    plainPassword
+  );
+  if (duplicatePasswordCount > 0) {
+    throw new ApiError(
+      "VALIDATION_ERROR",
+      "같은 동·호수에 이미 동일 비밀번호를 사용하는 회원이 있습니다. 다른 비밀번호를 사용해 주세요."
+    );
   }
 
-  const email = generateMemberEmail(trimmedDong, trimmedHo);
-  const passwordHash = await bcrypt.hash(DEFAULT_MEMBER_PASSWORD, 10);
+  const email = await generateUniqueMemberEmail(trimmedDong, trimmedHo);
+  const passwordHash = await bcrypt.hash(plainPassword, 10);
 
   const user = await prisma.user.create({
     data: {
@@ -98,7 +108,6 @@ export async function importMembers(rows: ImportRow[]): Promise<ImportResult> {
     users: [],
   };
 
-  const passwordHash = await bcrypt.hash(DEFAULT_MEMBER_PASSWORD, 10);
   const seenInFile = new Set<string>();
 
   for (const row of rows) {
@@ -106,7 +115,8 @@ export async function importMembers(rows: ImportRow[]): Promise<ImportResult> {
     const trimmedHo = row.ho.trim();
     const name = row.name.trim();
     const phone = toStoredPhone(row.phone);
-    const key = `${trimmedDong}:${trimmedHo}`;
+    const plainPassword = row.password?.trim() || DEFAULT_MEMBER_PASSWORD;
+    const key = `${trimmedDong}:${trimmedHo}:${plainPassword}`;
 
     if (!trimmedDong && !trimmedHo && !name && !phone) continue;
 
@@ -122,26 +132,29 @@ export async function importMembers(rows: ImportRow[]): Promise<ImportResult> {
       result.skipped += 1;
       result.errors.push({
         row: row.row,
-        message: "파일 내 동·호수 중복입니다.",
+        message: "파일 내 동·호수·비밀번호 조합이 중복입니다.",
       });
       continue;
     }
     seenInFile.add(key);
 
     try {
-      const existing = await prisma.user.findUnique({
-        where: { dong_ho: { dong: trimmedDong, ho: trimmedHo } },
-      });
-      if (existing) {
+      const duplicatePasswordCount = await countMembersWithUnitPassword(
+        trimmedDong,
+        trimmedHo,
+        plainPassword
+      );
+      if (duplicatePasswordCount > 0) {
         result.skipped += 1;
         result.errors.push({
           row: row.row,
-          message: "이미 등록된 동·호수입니다.",
+          message: "같은 동·호수에 이미 동일 비밀번호 회원이 있습니다.",
         });
         continue;
       }
 
-      const email = generateMemberEmail(trimmedDong, trimmedHo);
+      const email = await generateUniqueMemberEmail(trimmedDong, trimmedHo);
+      const passwordHash = await bcrypt.hash(plainPassword, 10);
       const user = await prisma.user.create({
         data: {
           name,

@@ -22,6 +22,7 @@ const emptyForm = {
   dong: "",
   ho: "",
   phone: "",
+  password: "1",
 };
 
 export function AdminUsersPanel() {
@@ -97,6 +98,8 @@ export function AdminUsersPanel() {
     setCreating(true);
     setMessage(null);
 
+    const registeredPassword = form.password.trim() || "1";
+
     const res = await fetch("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -109,7 +112,7 @@ export function AdminUsersPanel() {
       setForm(emptyForm);
       setMessage({
         type: "success",
-        text: "회원이 등록되었습니다. 동·호수 / 비밀번호(1)로 로그인할 수 있습니다.",
+        text: `회원이 등록되었습니다. 동·호수 / 비밀번호(${registeredPassword})로 로그인할 수 있습니다.`,
       });
     } else {
       setMessage({ type: "error", text: data.error?.message ?? "등록 실패" });
@@ -185,7 +188,8 @@ export function AdminUsersPanel() {
       <div className="rounded-xl bg-white p-6 shadow-sm">
         <h3 className="mb-1 font-semibold text-gray-900">회원 등록</h3>
         <p className="mb-4 text-xs text-gray-500">
-          동·호수로 로그인합니다. 초기 비밀번호는 모두 <strong>1</strong>입니다.
+          같은 동·호수에 여러 명 등록할 수 있습니다. 로그인은 <strong>동·호수 + 비밀번호</strong>
+          로 구분합니다. 비밀번호 미입력 시 기본값 <strong>1</strong>입니다.
         </p>
 
         {message && (
@@ -200,7 +204,7 @@ export function AdminUsersPanel() {
           </div>
         )}
 
-        <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div>
             <label className="mb-1 block text-xs text-gray-500">동</label>
             <input
@@ -240,6 +244,17 @@ export function AdminUsersPanel() {
               className="w-full rounded-lg border px-3 py-2 text-sm"
             />
           </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-500">비밀번호</label>
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              placeholder="1"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              required
+            />
+          </div>
           <div className="flex items-end">
             <button
               type="submit"
@@ -254,7 +269,7 @@ export function AdminUsersPanel() {
         <div className="mt-6 border-t pt-6">
           <h4 className="mb-1 text-sm font-semibold text-gray-900">엑셀 일괄 등록</h4>
           <p className="mb-3 text-xs text-gray-500">
-            양식: <strong>동 · 호수 · 이름 · 휴대폰</strong> (초기 비밀번호 1 자동 설정)
+            양식: <strong>동 · 호수 · 이름 · 휴대폰 · 비밀번호</strong> (비밀번호 미입력 시 1)
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <button

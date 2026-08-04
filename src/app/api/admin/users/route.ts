@@ -10,6 +10,7 @@ const createSchema = z.object({
   dong: z.string().min(1, "동을 입력해 주세요."),
   ho: z.string().min(1, "호수를 입력해 주세요."),
   phone: z.string().optional(),
+  password: z.string().min(1).optional(),
 });
 
 export async function GET() {
@@ -56,9 +57,9 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
     const body = await request.json();
-    const { name, dong, ho, phone } = createSchema.parse(body);
+    const { name, dong, ho, phone, password } = createSchema.parse(body);
 
-    const user = await createMember({ name, dong, ho, phone });
+    const user = await createMember({ name, dong, ho, phone, password });
 
     return Response.json(
       {
