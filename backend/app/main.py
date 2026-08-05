@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import Base, SessionLocal, engine
+from app.database import Base, SessionLocal, get_engine
 from app.exceptions import ApiError, api_error_handler
 from app.models import Reservation, User  # noqa: F401 — register metadata
 from app.routers import admin, auth, reservations, slots
@@ -14,7 +14,9 @@ from app.services.seed_service import seed_default_accounts
 
 
 def init_database() -> dict:
+    engine = get_engine()
     Base.metadata.create_all(bind=engine)
+    assert SessionLocal is not None
     db = SessionLocal()
     try:
         return seed_default_accounts(db)
@@ -86,6 +88,8 @@ def setup_seed():
 @setup_router.get("/status")
 def setup_status():
     try:
+        get_engine()
+        assert SessionLocal is not None
         db = SessionLocal()
         try:
             count = db.query(User).count()
@@ -93,7 +97,10 @@ def setup_status():
         finally:
             db.close()
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "database": "error", "message": str(exc)}
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "database": "error", "message": str(exc)},
+        )
 
 
 app.include_router(auth.router, prefix="/api")
@@ -105,4 +112,22 @@ app.include_router(setup_router, prefix="/api")
 
 @app.get("/health")
 def health():
-    return {"ok": True, "environment": settings.environment}
+    db_ok = False
+    db_message = "not_checked"
+    try:
+        get_engine()
+        assert SessionLocal is not None
+        db = SessionLocal()
+        try:
+            db_ok = db.query(User).count() >= 0
+            db_message = "connected"
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        db_message = str(exc)
+
+    return {
+        "ok": True,
+        "environment": settings.environment,
+        "database": {"ok": db_ok, "message": db_message},
+    }
