@@ -8,6 +8,8 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+type InAppKind = "kakaotalk" | "naver" | "instagram" | "facebook" | "line" | "other" | null;
+
 function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
   return (
@@ -22,6 +24,62 @@ function isIos(): boolean {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
+function detectInAppBrowser(): InAppKind {
+  if (typeof window === "undefined") return null;
+  const ua = navigator.userAgent.toLowerCase();
+
+  if (ua.includes("kakaotalk")) return "kakaotalk";
+  if (ua.includes("naver") && (ua.includes("inapp") || ua.includes("naver("))) return "naver";
+  if (ua.includes("instagram")) return "instagram";
+  if (ua.includes("fban") || ua.includes("fbav") || ua.includes("fb_iab")) return "facebook";
+  if (ua.includes("line/")) return "line";
+
+  // 일반 WebView 휴리스틱 (Android)
+  if (ua.includes("; wv)") || ua.includes("webview")) return "other";
+
+  return null;
+}
+
+function inAppLabel(kind: InAppKind): string {
+  switch (kind) {
+    case "kakaotalk":
+      return "카카오톡";
+    case "naver":
+      return "네이버";
+    case "instagram":
+      return "인스타그램";
+    case "facebook":
+      return "페이스북";
+    case "line":
+      return "라인";
+    default:
+      return "앱 내 브라우저";
+  }
+}
+
+function openInExternalBrowser() {
+  const url = window.location.href;
+  const ua = navigator.userAgent.toLowerCase();
+  const ios = isIos();
+
+  // 카카오톡: 외부 브라우저 스킴
+  if (ua.includes("kakaotalk")) {
+    if (ios) {
+      // iOS는 스킴이 불안정해 안내 위주 — 클립보드 복사 보조
+      void navigator.clipboard?.writeText(url);
+      window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`;
+      return;
+    }
+    // Android Chrome intent
+    const hostPath = url.replace(/^https?:\/\//, "");
+    window.location.href =
+      `intent://${hostPath}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+    return;
+  }
+
+  void navigator.clipboard?.writeText(url);
+}
+
 export function PWAInstallPrompt() {
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
@@ -30,10 +88,19 @@ export function PWAInstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
   const [iosHint, setIosHint] = useState(false);
+  const [inApp, setInApp] = useState<InAppKind>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (isStandalone()) return;
     if (localStorage.getItem(storageKey) === "1") return;
+
+    const inAppKind = detectInAppBrowser();
+    if (inAppKind) {
+      setInApp(inAppKind);
+      setVisible(true);
+      return;
+    }
 
     if (isIos()) {
       setIosHint(true);
@@ -49,7 +116,6 @@ export function PWAInstallPrompt() {
 
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
 
-    // Chrome 외 브라우저: 이벤트 없어도 안내 배너 표시
     const timer = window.setTimeout(() => {
       setVisible((current) => current || true);
     }, 2500);
@@ -81,6 +147,16 @@ export function PWAInstallPrompt() {
     }
   };
 
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   if (!visible) return null;
 
   const appName = isAdmin ? "골프관리" : "골프예약";
@@ -90,6 +166,65 @@ export function PWAInstallPrompt() {
   const buttonClass = isAdmin
     ? "bg-teal-700 hover:bg-teal-800"
     : "bg-primary-600 hover:bg-primary-700";
+
+  if (inApp) {
+    const name = inAppLabel(inApp);
+    return (
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center p-4">
+        <div
+          className={`pointer-events-auto w-full max-w-md rounded-2xl border p-4 shadow-lg ${accent}`}
+          role="dialog"
+          aria-label="외부 브라우저 안내"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">{appName} 설치 안내</p>
+              <p className="mt-1 text-xs leading-relaxed opacity-80">
+                지금 {name} 안의 브라우저로 열려 있어 앱 설치가 되지 않습니다.
+                <br />
+                {isIos() ? (
+                  <>
+                    우측 상단 <span className="font-semibold">⋯</span> →{" "}
+                    <span className="font-semibold">Safari로 열기</span> 후 홈 화면에 추가하세요.
+                  </>
+                ) : (
+                  <>
+                    우측 상단 <span className="font-semibold">⋯</span> →{" "}
+                    <span className="font-semibold">다른 브라우저로 열기</span> (Chrome 등) 후
+                    설치하세요.
+                  </>
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={dismiss}
+              className="shrink-0 rounded-lg px-2 py-1 text-xs opacity-60 hover:opacity-100"
+              aria-label="닫기"
+            >
+              닫기
+            </button>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={openInExternalBrowser}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-medium text-white ${buttonClass}`}
+            >
+              외부 브라우저로 열기
+            </button>
+            <button
+              type="button"
+              onClick={copyLink}
+              className="rounded-xl border border-black/10 bg-white/70 px-3 py-2.5 text-sm font-medium"
+            >
+              {copied ? "복사됨" : "링크 복사"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center p-4">

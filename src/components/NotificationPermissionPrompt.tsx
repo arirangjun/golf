@@ -10,6 +10,21 @@ function canAskNotification(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
+function isInAppBrowser(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent.toLowerCase();
+  return (
+    ua.includes("kakaotalk") ||
+    ua.includes("instagram") ||
+    ua.includes("fban") ||
+    ua.includes("fbav") ||
+    ua.includes("line/") ||
+    (ua.includes("naver") && (ua.includes("inapp") || ua.includes("naver("))) ||
+    ua.includes("; wv)") ||
+    ua.includes("webview")
+  );
+}
+
 /** 향후 Web Push 구독 시 사용할 권한 상태 */
 export function getNotificationPermission(): NotificationPermission | "unsupported" {
   if (!canAskNotification()) return "unsupported";
@@ -23,6 +38,7 @@ export function NotificationPermissionPrompt() {
 
   useEffect(() => {
     if (!isMember || !canAskNotification()) return;
+    if (isInAppBrowser()) return;
     if (Notification.permission !== "default") return;
     if (localStorage.getItem(DISMISS_KEY) === "1") return;
 
