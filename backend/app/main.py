@@ -14,7 +14,10 @@ from app.routers import admin, auth, reservations, slots
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as exc:  # noqa: BLE001 — boot even if DB is briefly unavailable
+        print(f"Warning: schema init skipped: {exc}")
     yield
 
 

@@ -9,10 +9,6 @@ const nextConfig: NextConfig = {
     return {
       beforeFiles: [
         {
-          source: "/health",
-          destination: `${apiUrl}/health`,
-        },
-        {
           source: "/api/:path*",
           destination: `${apiUrl}/api/:path*`,
         },
