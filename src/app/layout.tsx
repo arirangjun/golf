@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { PWARegister } from "@/components/PWARegister";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 
 export const metadata: Metadata = {
   title: "스크린골프 예약",
@@ -32,6 +33,7 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <PWARegister />
+          <PWAInstallPrompt />
         </AuthProvider>
       </body>
     </html>
