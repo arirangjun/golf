@@ -64,6 +64,9 @@ export function PWAInstallPrompt() {
     localStorage.setItem(storageKey, "1");
     setVisible(false);
     setDeferred(null);
+    if (!isAdmin) {
+      window.dispatchEvent(new CustomEvent("pwa-install-dismissed"));
+    }
   };
 
   const install = async () => {
@@ -73,6 +76,9 @@ export function PWAInstallPrompt() {
     setDeferred(null);
     setVisible(false);
     localStorage.setItem(storageKey, "1");
+    if (!isAdmin) {
+      window.dispatchEvent(new CustomEvent("pwa-install-dismissed"));
+    }
   };
 
   if (!visible) return null;
