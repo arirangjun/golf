@@ -21,6 +21,7 @@ import {
   OPERATING_START_HOUR,
   OPERATING_END_HOUR,
 } from "./utils";
+import { nowKST } from "./kst";
 
 export interface SlotInfo {
   startHour: number;
@@ -118,7 +119,7 @@ export async function createReservation(
   input: CreateReservationInput
 ): Promise<{ id: string }> {
   const { userId, date, startHour, isAdmin = false } = input;
-  const now = new Date();
+  const now = nowKST();
   const dateOnly = toDateOnly(date);
 
   if (startHour < OPERATING_START_HOUR || startHour >= OPERATING_END_HOUR) {

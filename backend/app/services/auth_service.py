@@ -1,0 +1,134 @@
+from dataclasses import dataclass
+from datetime import timedelta
+
+import jwt
+from fastapi import Response
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.exceptions import ApiError
+from app.models import Role, User
+from app.services.booking_rules import now_kst
+from app.services.formatting import verify_password
+
+
+@dataclass
+class SessionUser:
+    id: str
+    email: str
+    name: str
+    role: Role
+
+
+def _encode_token(user: SessionUser) -> str:
+    payload = {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role.value,
+        "exp": now_kst() + timedelta(seconds=settings.cookie_max_age),
+        "iat": now_kst(),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+
+
+def decode_token(token: str) -> SessionUser | None:
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+        return SessionUser(
+            id=payload["id"],
+            email=payload["email"],
+            name=payload["name"],
+            role=Role(payload["role"]),
+        )
+    except jwt.PyJWTError:
+        return None
+
+
+def set_session_cookie(response: Response, user: SessionUser) -> None:
+    token = _encode_token(user)
+    response.set_cookie(
+        key=settings.cookie_name,
+        value=token,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="lax",
+        path="/",
+        max_age=settings.cookie_max_age,
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(key=settings.cookie_name, path="/")
+
+
+def authenticate_admin(db: Session, email: str, password: str) -> User:
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not user.isActive or user.role != Role.ADMIN:
+        raise ApiError("UNAUTHORIZED", "관리자 계정 정보가 올바르지 않습니다.", 401)
+    if not verify_password(password, user.passwordHash):
+        raise ApiError("UNAUTHORIZED", "관리자 계정 정보가 올바르지 않습니다.", 401)
+    return user
+
+
+def authenticate_member(db: Session, dong: str, ho: str, password: str) -> User:
+    trimmed_dong = dong.strip()
+    trimmed_ho = ho.strip()
+
+    users = (
+        db.query(User)
+        .filter(
+            User.dong == trimmed_dong,
+            User.ho == trimmed_ho,
+            User.role == Role.USER,
+            User.isActive.is_(True),
+        )
+        .all()
+    )
+
+    if not users:
+        raise ApiError("UNAUTHORIZED", "등록되지 않았거나 비활성화된 회원입니다.", 401)
+
+    matches = [user for user in users if verify_password(password, user.passwordHash)]
+
+    if not matches:
+        raise ApiError("UNAUTHORIZED", "동·호수 또는 비밀번호가 올바르지 않습니다.", 401)
+
+    if len(matches) > 1:
+        raise ApiError(
+            "UNAUTHORIZED",
+            "같은 동·호수에 동일 비밀번호 회원이 여러 명 있습니다. 관리자에게 문의해 주세요.",
+            401,
+        )
+
+    return matches[0]
+
+
+def to_session_user(user: User) -> SessionUser:
+    return SessionUser(id=user.id, email=user.email, name=user.name, role=user.role)
+
+
+def require_session(token: str | None) -> SessionUser:
+    if not token:
+        raise ApiError("UNAUTHORIZED", "로그인이 필요합니다.", 401)
+    session = decode_token(token)
+    if not session:
+        raise ApiError("UNAUTHORIZED", "로그인이 필요합니다.", 401)
+    return session
+
+
+def require_admin(db: Session, token: str | None) -> SessionUser:
+    session = require_session(token)
+    if session.role != Role.ADMIN:
+        raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
+    return session
+
+
+def require_member(db: Session, token: str | None) -> SessionUser:
+    session = require_session(token)
+    if session.role != Role.USER:
+        raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
+    user = db.query(User).filter(User.id == session.id).first()
+    if not user or not user.isActive:
+        raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
+    return session

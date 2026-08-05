@@ -15,6 +15,7 @@ import {
   setMilliseconds,
 } from "date-fns";
 import { ko } from "date-fns/locale";
+import { nowKST, parseDateKST, getReservationDateTimeKST, startOfDayKST } from "./kst";
 
 /** Operating hours: 00:00 - 24:00 (24 slots) */
 export const OPERATING_START_HOUR = 0;
@@ -41,7 +42,7 @@ function getSaturdayBookingOpenTime(saturday: Date): Date {
 
 /** Currently open bookable week (Mon–Sun), opened at the most recent Sat 14:00 */
 export function getCurrentlyBookableWeekRange(
-  now: Date = new Date()
+  now: Date = nowKST()
 ): { start: Date; end: Date } | null {
   let saturday = isSaturday(now) ? toDateOnly(now) : previousSaturday(now);
   let openTime = getSaturdayBookingOpenTime(saturday);
@@ -56,7 +57,7 @@ export function getCurrentlyBookableWeekRange(
 }
 
 /** When the next booking window opens (next Sat 14:00, or today if not yet open) */
-export function getNextBookingOpenTime(now: Date = new Date()): Date {
+export function getNextBookingOpenTime(now: Date = nowKST()): Date {
   let saturday = isSaturday(now) ? toDateOnly(now) : nextSaturday(now);
   let openTime = getSaturdayBookingOpenTime(saturday);
 
@@ -68,7 +69,7 @@ export function getNextBookingOpenTime(now: Date = new Date()): Date {
   return openTime;
 }
 
-export function canBookDate(date: Date, now: Date = new Date()): boolean {
+export function canBookDate(date: Date, now: Date = nowKST()): boolean {
   const range = getCurrentlyBookableWeekRange(now);
   if (!range) return false;
 
@@ -76,7 +77,7 @@ export function canBookDate(date: Date, now: Date = new Date()): boolean {
   return dateOnly >= range.start && dateOnly <= range.end;
 }
 
-export function formatBookingWindowMessage(now: Date = new Date()): string {
+export function formatBookingWindowMessage(now: Date = nowKST()): string {
   const range = getCurrentlyBookableWeekRange(now);
   if (!range) {
     const nextOpen = getNextBookingOpenTime(now);
@@ -167,13 +168,13 @@ export function isOperatingHour(hour: number): boolean {
 }
 
 export function getReservationDateTime(date: Date, startHour: number): Date {
-  return addHours(startOfDay(date), startHour);
+  return getReservationDateTimeKST(date, startHour);
 }
 
 export function canCancelReservation(
   reservationDate: Date,
   startHour: number,
-  now: Date = new Date()
+  now: Date = nowKST()
 ): boolean {
   const reservationTime = getReservationDateTime(reservationDate, startHour);
   const diffMs = reservationTime.getTime() - now.getTime();
@@ -183,16 +184,15 @@ export function canCancelReservation(
 
 export function isNextDayBonusBookingAllowed(
   targetDate: Date,
-  now: Date = new Date()
+  now: Date = nowKST()
 ): boolean {
   if (now.getHours() < NEXT_DAY_BONUS_START_HOUR) return false;
-  const tomorrow = addDays(startOfDay(now), 1);
+  const tomorrow = addDays(startOfDayKST(now), 1);
   return isSameDay(targetDate, tomorrow);
 }
 
 export function parseDateInput(dateStr: string): Date {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  return startOfDay(new Date(year, month - 1, day));
+  return parseDateKST(dateStr);
 }
 
 export type ApiErrorCode =

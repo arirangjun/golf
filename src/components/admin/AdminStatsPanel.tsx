@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { format, subDays } from "date-fns";
+import { format } from "date-fns";
+import { defaultStatsRangeKST } from "@/lib/kst";
 import {
   BarChart,
   Bar,
@@ -41,11 +42,12 @@ function formatHour(h: number) {
 }
 
 export function AdminStatsPanel() {
+  const defaultRange = defaultStatsRangeKST();
   const [stats, setStats] = useState<Stats | null>(null);
   const [memberStats, setMemberStats] = useState<MonthlyMemberStats | null>(null);
-  const [from, setFrom] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
-  const [to, setTo] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), "yyyy-MM"));
+  const [from, setFrom] = useState(defaultRange.from);
+  const [to, setTo] = useState(defaultRange.to);
+  const [selectedMonth, setSelectedMonth] = useState(defaultRange.month);
   const [loading, setLoading] = useState(true);
   const [memberLoading, setMemberLoading] = useState(true);
   const [exporting, setExporting] = useState(false);

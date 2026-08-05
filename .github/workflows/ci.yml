@@ -11,22 +11,21 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
-      postgres:
-        image: postgres:16
+      mysql:
+        image: mysql:8
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: golf
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: golf
         ports:
-          - 5432:5432
+          - 3306:3306
         options: >-
-          --health-cmd pg_isready
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/golf?schema=public
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/golf
       JWT_SECRET: ci-test-secret-change-me
 
     steps:

@@ -6,11 +6,9 @@ import {
   addWeeks,
   subWeeks,
   parseISO,
-  startOfDay,
-  addHours,
-  isBefore,
 } from "date-fns";
 import { ko } from "date-fns/locale";
+import { isPastSlotKST } from "@/lib/kst";
 
 interface Slot {
   startHour: number;
@@ -46,8 +44,7 @@ function formatHour(h: number) {
 }
 
 function isPastSlot(dateStr: string, hour: number): boolean {
-  const slotTime = addHours(startOfDay(parseISO(dateStr)), hour);
-  return isBefore(slotTime, new Date());
+  return isPastSlotKST(dateStr, hour);
 }
 
 export function AdminReservationsPanel() {

@@ -4,10 +4,11 @@ Next.js App Router 기반 스크린골프 타임슬롯 예약 시스템입니다
 
 ## 기술 스택
 
-- **Next.js 15** (App Router)
+- **Next.js 15** (App Router, 프론트엔드)
+- **FastAPI** (Python 백엔드 API)
 - **TypeScript**
 - **Tailwind CSS**
-- **Prisma ORM** (PostgreSQL)
+- **SQLAlchemy + MySQL**
 - **PWA** (manifest + Service Worker)
 
 ## 예약 규칙
@@ -27,30 +28,26 @@ Next.js App Router 기반 스크린골프 타임슬롯 예약 시스템입니다
 
 ## 시작하기
 
-PostgreSQL이 필요합니다. [Neon](https://neon.tech) 무료 DB를 사용할 수 있습니다.
-
-**로컬 개발 (SQLite, 별도 DB 설치 불필요):**
+MySQL이 필요합니다. [Railway](https://railway.app)에서 MySQL을 사용할 수 있습니다.
 
 ```bash
+# 1. 프론트엔드
 npm install
 cp .env.example .env
-npm run db:setup:local   # 최초 1회 또는 schema 변경 후
-npm run dev
+# .env 에 MySQL DATABASE_URL, JWT_SECRET 설정
+npm run db:setup   # 최초 1회: Prisma 마이그레이션 + 시드
+
+# 2. 백엔드 (FastAPI)
+cd backend
+pip install -r requirements.txt
+python seed.py     # Prisma 시드 대신 Python 시드 사용 가능
+
+# 3. 실행 (터미널 2개)
+npm run dev:api    # FastAPI → http://127.0.0.1:8000
+npm run dev        # Next.js → http://localhost:3000 (API는 FastAPI로 프록시)
 ```
 
-> `npm run dev` 실행 시 `EPERM` 오류가 나면, 이미 실행 중인 개발 서버를 종료한 뒤 다시 실행하세요.  
-> Prisma schema를 수정했다면 `npm run db:generate:local`을 먼저 실행하세요.
-
-**배포 / PostgreSQL:**
-
-```bash
-npm install
-cp .env.example .env
-# .env 에 PostgreSQL DATABASE_URL, JWT_SECRET 설정
-npm run db:migrate:deploy
-npm run db:seed
-npm run dev
-```
+> Next.js는 `/api/*` 요청을 FastAPI(`API_URL`)로 프록시합니다.
 
 ## 테스트 계정
 
@@ -105,10 +102,10 @@ git push
 
 ## Vercel 배포
 
-### 1. PostgreSQL 준비 (Neon)
+### 1. MySQL 준비 (Railway)
 
-1. [Neon](https://neon.tech)에서 프로젝트 생성
-2. Connection string 복사 (`postgresql://...?sslmode=require`)
+1. [Railway](https://railway.app)에서 MySQL 서비스 생성
+2. Connection string 복사 (`mysql://...`)
 
 ### 2. Vercel 연결
 
@@ -118,7 +115,7 @@ git push
 
 | 변수 | 값 |
 |------|-----|
-| `DATABASE_URL` | Neon PostgreSQL URL |
+| `DATABASE_URL` | Railway MySQL URL |
 | `JWT_SECRET` | 랜덤 문자열 (32자 이상) |
 
 4. **Deploy** 클릭
@@ -127,10 +124,10 @@ git push
 
 ### 3. 최초 시드 (1회)
 
-배포 후 로컬에서 Neon URL로 시드 실행:
+배포 후 로컬에서 Railway MySQL URL로 시드 실행:
 
 ```bash
-DATABASE_URL="postgresql://..." npm run db:seed
+DATABASE_URL="mysql://..." npm run db:seed
 ```
 
 ### 배포 URL
