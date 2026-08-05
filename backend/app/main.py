@@ -1,23 +1,34 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, SessionLocal, engine
 from app.exceptions import ApiError, api_error_handler
 from app.models import Reservation, User  # noqa: F401 — register metadata
 from app.routers import admin, auth, reservations, slots
+from app.services.seed_service import seed_default_accounts
+
+
+def init_database() -> dict:
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        return seed_default_accounts(db)
+    finally:
+        db.close()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     try:
-        Base.metadata.create_all(bind=engine)
-    except Exception as exc:  # noqa: BLE001 — boot even if DB is briefly unavailable
-        print(f"Warning: schema init skipped: {exc}")
+        result = init_database()
+        print(f"DB ready: {result}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: DB init/seed failed: {exc}")
     yield
 
 
@@ -52,10 +63,44 @@ async def generic_exception_handler(_request: Request, exc: Exception):
     raise exc
 
 
+setup_router = APIRouter(prefix="/setup", tags=["setup"])
+
+
+@setup_router.post("/seed")
+def setup_seed():
+    """Create tables + default accounts (idempotent)."""
+    try:
+        result = init_database()
+        return {
+            "ok": True,
+            **result,
+            "accounts": {
+                "admin": "admin@golf.com / admin1234",
+                "member": "101동 1001호 / 1",
+            },
+        }
+    except Exception as exc:  # noqa: BLE001
+        raise ApiError("INTERNAL_ERROR", f"DB 시드 실패: {exc}", 500) from exc
+
+
+@setup_router.get("/status")
+def setup_status():
+    try:
+        db = SessionLocal()
+        try:
+            count = db.query(User).count()
+            return {"ok": True, "userCount": count, "database": "connected"}
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "database": "error", "message": str(exc)}
+
+
 app.include_router(auth.router, prefix="/api")
 app.include_router(reservations.router, prefix="/api")
 app.include_router(slots.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(setup_router, prefix="/api")
 
 
 @app.get("/health")
