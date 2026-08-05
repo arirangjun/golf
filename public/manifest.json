@@ -1,8 +1,10 @@
 {
   "name": "스크린골프 예약",
   "short_name": "골프예약",
-  "description": "스크린골프 타임슬롯 예약 시스템",
+  "description": "회원용 스크린골프 타임슬롯 예약",
   "start_url": "/",
+  "scope": "/",
+  "id": "/?pwa=member",
   "display": "standalone",
   "background_color": "#f0fdf4",
   "theme_color": "#16a34a",

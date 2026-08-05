@@ -27,7 +27,7 @@ export function HomePage() {
   if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-green-100 p-4">
-        <LoginForm />
+          <LoginForm mode="member" />
       </div>
     );
   }

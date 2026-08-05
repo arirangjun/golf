@@ -5,7 +5,7 @@ import { PWARegister } from "@/components/PWARegister";
 
 export const metadata: Metadata = {
   title: "스크린골프 예약",
-  description: "PWA 기반 스크린골프 타임슬롯 예약 시스템",
+  description: "회원용 스크린골프 타임슬롯 예약 PWA",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

@@ -3,9 +3,11 @@
 import { useAuth } from "./AuthProvider";
 import { useState } from "react";
 
-export function LoginForm() {
+type LoginMode = "member" | "admin";
+
+export function LoginForm({ mode = "member" }: { mode?: LoginMode }) {
   const { loginMember, loginAdmin } = useAuth();
-  const [isAdminMode, setIsAdminMode] = useState(false);
+  const isAdminMode = mode === "admin";
   const [dong, setDong] = useState("");
   const [ho, setHo] = useState("");
   const [email, setEmail] = useState("");
@@ -32,7 +34,9 @@ export function LoginForm() {
 
   return (
     <div className="mx-auto w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
-      <h1 className="mb-2 text-2xl font-bold text-gray-900">스크린골프 예약</h1>
+      <h1 className="mb-2 text-2xl font-bold text-gray-900">
+        {isAdminMode ? "스크린골프 관리" : "스크린골프 예약"}
+      </h1>
       <p className="mb-6 text-sm text-gray-500">
         {isAdminMode
           ? "관리자 계정으로 로그인합니다."
@@ -102,18 +106,6 @@ export function LoginForm() {
           {loading ? "로그인 중..." : "로그인"}
         </button>
       </form>
-      <div className="mt-4 text-center">
-        <button
-          type="button"
-          onClick={() => {
-            setIsAdminMode(!isAdminMode);
-            setError("");
-          }}
-          className="text-xs text-gray-500 underline hover:text-gray-700"
-        >
-          {isAdminMode ? "회원 로그인" : "관리자 로그인"}
-        </button>
-      </div>
       {!isAdminMode && (
         <p className="mt-4 text-center text-xs text-gray-400">
           계정이 없으신 경우 관리자에게 회원 등록을 요청해 주세요.
