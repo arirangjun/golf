@@ -1,17 +1,28 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.database import Base, engine
 from app.exceptions import ApiError, api_error_handler
+from app.models import Reservation, User  # noqa: F401 — register metadata
 from app.routers import admin, auth, reservations, slots
 
-app = FastAPI(title="Screen Golf Reservation API")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
+app = FastAPI(title="Screen Golf Reservation API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3000"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,4 +57,4 @@ app.include_router(admin.router, prefix="/api")
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "environment": settings.environment}

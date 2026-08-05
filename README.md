@@ -26,28 +26,36 @@ Next.js App Router 기반 스크린골프 타임슬롯 예약 시스템입니다
 - **DB 레벨**: `Reservation` 모델에 `@@unique([date, startHour])` 복합 유니크 제약
 - **API 레벨**: Serializable 트랜잭션 + 사전 슬롯 점유 확인 + Prisma P2002 에러 처리
 
-## 시작하기
+## 시작하기 (Railway 단일 서비스)
 
-MySQL이 필요합니다. [Railway](https://railway.app)에서 MySQL을 사용할 수 있습니다.
+Next.js + FastAPI를 **같은 Railway 서비스**에서 실행합니다.  
+공개 URL 하나(`https://golf-production-b1e3.up.railway.app`)로 UI와 API를 모두 제공합니다.
+
+### Railway 설정
+
+1. 서비스 **Root Directory** = 저장소 루트 (비워두기)
+2. Builder = **Dockerfile** (`Dockerfile` 사용)
+3. Variables:
+
+| 변수 | 값 |
+|------|-----|
+| `DATABASE_URL` | `${{MySQL.MYSQL_URL}}` 또는 internal MySQL URL |
+| `JWT_SECRET` | 랜덤 문자열 |
+| `FRONTEND_URL` | `https://golf-production-b1e3.up.railway.app` |
+| `API_URL` | `http://127.0.0.1:8000` (기본값, 생략 가능) |
+| `ENVIRONMENT` | `production` |
+
+4. 배포 후 확인:
+   - `https://.../health` → `{"ok":true}`
+   - `https://.../` → 예약 UI
+
+5. 최초 시드 (Railway Shell):
 
 ```bash
-# 1. 프론트엔드
-npm install
-cp .env.example .env
-# .env 에 MySQL DATABASE_URL, JWT_SECRET 설정
-npm run db:setup   # 최초 1회: Prisma 마이그레이션 + 시드
-
-# 2. 백엔드 (FastAPI)
-cd backend
-pip install -r requirements.txt
-python seed.py     # Prisma 시드 대신 Python 시드 사용 가능
-
-# 3. 실행 (터미널 2개)
-npm run dev:api    # FastAPI → http://127.0.0.1:8000
-npm run dev        # Next.js → http://localhost:3000 (API는 FastAPI로 프록시)
+cd /app/backend && python seed.py
 ```
 
-> Next.js는 `/api/*` 요청을 FastAPI(`API_URL`)로 프록시합니다.
+컨테이너 안에서 FastAPI는 `127.0.0.1:8000`, Next는 `$PORT`로 뜨고 `/api/*`·`/health`는 Next가 FastAPI로 프록시합니다.
 
 ## 테스트 계정
 
@@ -100,36 +108,21 @@ git push
 
 > **참고:** `.env`는 GitHub에 올라가지 않습니다. 배포 시 `DATABASE_URL`, `JWT_SECRET` 환경 변수를 설정하세요.
 
-## Vercel 배포
+## Vercel 배포 (선택)
 
-### 1. MySQL 준비 (Railway)
-
-1. [Railway](https://railway.app)에서 MySQL 서비스 생성
-2. Connection string 복사 (`mysql://...`)
-
-### 2. Vercel 연결
-
-1. [Vercel](https://vercel.com) → **Add New Project**
-2. GitHub `arirangjun/golf` 저장소 Import
-3. **Environment Variables** 설정:
+단일 Railway 서비스만 써도 됩니다. Vercel에 프론트만 올릴 경우:
 
 | 변수 | 값 |
 |------|-----|
-| `DATABASE_URL` | Railway MySQL URL |
-| `JWT_SECRET` | 랜덤 문자열 (32자 이상) |
+| `API_URL` | Railway 공개 URL (`https://golf-production-b1e3.up.railway.app`) |
+| `JWT_SECRET` | Railway와 동일 |
 
-4. **Deploy** 클릭
-
-배포 시 `prisma migrate deploy`가 자동 실행되어 DB 스키마가 생성됩니다.
-
-### 3. 최초 시드 (1회)
-
-배포 후 로컬에서 Railway MySQL URL로 시드 실행:
+### 최초 시드
 
 ```bash
-DATABASE_URL="mysql://..." npm run db:seed
+cd /app/backend && python seed.py
 ```
 
 ### 배포 URL
 
-Vercel 대시보드에서 `https://golf-xxx.vercel.app` 형태의 URL을 확인할 수 있습니다.
+`https://golf-production-b1e3.up.railway.app`

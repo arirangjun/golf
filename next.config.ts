@@ -1,15 +1,23 @@
 import type { NextConfig } from "next";
 
-const apiUrl = process.env.API_URL ?? "http://127.0.0.1:8000";
+// 같은 Railway 컨테이너에서 FastAPI(8000) + Next 동시 실행
+const apiUrl = (process.env.API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${apiUrl}/api/:path*`,
-      },
-    ];
+    return {
+      beforeFiles: [
+        {
+          source: "/health",
+          destination: `${apiUrl}/health`,
+        },
+        {
+          source: "/api/:path*",
+          destination: `${apiUrl}/api/:path*`,
+        },
+      ],
+    };
   },
   headers: async () => [
     {
