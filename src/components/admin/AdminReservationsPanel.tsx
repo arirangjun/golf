@@ -8,7 +8,6 @@ import {
   parseISO,
 } from "date-fns";
 import { ko } from "date-fns/locale";
-import { isPastSlotKST } from "@/lib/kst";
 
 interface Slot {
   startHour: number;
@@ -41,10 +40,6 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function formatHour(h: number) {
   return `${String(h).padStart(2, "0")}:00`;
-}
-
-function isPastSlot(dateStr: string, hour: number): boolean {
-  return isPastSlotKST(dateStr, hour);
 }
 
 export function AdminReservationsPanel() {
@@ -148,7 +143,7 @@ export function AdminReservationsPanel() {
       return;
     }
 
-    if (!slot.available || !slot.isOperating || isPastSlot(date, slot.startHour)) return;
+    if (!slot.available || !slot.isOperating) return;
 
     if (!selectedUserId) {
       setMessage({ type: "error", text: "예약할 회원을 먼저 선택해 주세요." });
@@ -171,7 +166,7 @@ export function AdminReservationsPanel() {
 
   const getCellClass = (date: string, slot: Slot | undefined) => {
     if (!slot) return "bg-gray-50";
-    if (isPastSlot(date, slot.startHour)) return "bg-gray-50 cursor-not-allowed opacity-50";
+    // 관리자: 과거 슬롯도 예약/취소 가능
     if (!slot.available && slot.reservationId) {
       return "bg-red-50 border-red-100 cursor-pointer hover:bg-red-100";
     }
@@ -303,9 +298,9 @@ export function AdminReservationsPanel() {
                     {weekDays.map((day, dayIdx) => {
                       const slot = slotMap.get(`${day.date}-${hour}`);
                       const label = getCellLabel(slot);
-                      const clickable =
-                        (slot?.reservationId && !isPastSlot(day.date, hour)) ||
-                        (slot?.available && !isPastSlot(day.date, hour));
+                      const clickable = Boolean(
+                        slot?.reservationId || slot?.available
+                      );
 
                       return (
                         <button

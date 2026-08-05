@@ -13,7 +13,6 @@ from app.exceptions import ApiError
 from app.models import Role, User
 from app.services.auth_service import SessionUser
 from app.services.booking_rules import (
-    can_cancel_reservation,
     format_date,
     format_hour,
     get_week_range,
@@ -232,7 +231,7 @@ def admin_list_reservations(
                 "endHour": r.endHour,
                 "isSameDayBooking": r.isSameDayBooking,
                 "timeLabel": f"{format_hour(r.startHour)} - {format_hour(r.endHour)}",
-                "canCancel": can_cancel_reservation(r.date, r.startHour),
+                "canCancel": True,
                 "user": {
                     "id": r.user.id,
                     "name": r.user.name,
