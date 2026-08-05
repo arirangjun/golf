@@ -20,6 +20,7 @@ from app.services.booking_rules import (
     get_next_booking_open_time,
     get_reservation_datetime,
     get_week_range,
+    is_next_day_bonus_booking_allowed,
     is_operating_hour,
     now_kst,
     to_date_only,
@@ -108,12 +109,13 @@ def get_slots_for_week(
 
 
 def count_weekly_reservations(db: Session, user_id: str, target: date) -> int:
-    """해당 주(월~일) 예약 건수 (보너스 구분 없이 전부)."""
+    """해당 주(월~일) 기본 예약 건수 (익일 보너스 제외)."""
     start, end = get_week_range(target)
     return (
         db.query(Reservation)
         .filter(
             Reservation.userId == user_id,
+            Reservation.isSameDayBooking.is_(False),
             func.date(Reservation.date) >= start,
             func.date(Reservation.date) <= end,
         )
@@ -160,12 +162,17 @@ def create_reservation(
     if not user or not user.isActive:
         raise ApiError("USER_INACTIVE", "비활성화된 계정입니다.", 403)
 
-    # 회원: 해당 오픈 주간에 예약 1회만 (언제든 1슬롯)
-    if not is_admin and count_weekly_reservations(db, user_id, date_only) >= 1:
-        raise ApiError(
-            "WEEKLY_LIMIT",
-            "이번 주(월~일) 예약은 1회만 가능합니다.",
-        )
+    # 회원: 주간 1회 + 21:00 이후 내일 잔여 슬롯 추가 1회
+    mark_as_bonus = False
+    if not is_admin:
+        if is_next_day_bonus_booking_allowed(date_only, current):
+            mark_as_bonus = True
+        elif count_weekly_reservations(db, user_id, date_only) >= 1:
+            raise ApiError(
+                "WEEKLY_LIMIT",
+                "이번 주(월~일) 기본 예약은 1회만 가능합니다. "
+                "21:00 이후 내일 잔여 슬롯은 추가 1회 예약할 수 있습니다.",
+            )
 
     try:
         conn = db.connection()
@@ -179,26 +186,40 @@ def create_reservation(
         if existing:
             raise ApiError("SLOT_TAKEN", "이미 예약된 시간입니다.", 409)
 
-        if not is_admin:
+        if not is_admin and not mark_as_bonus:
             week_start, week_end = get_week_range(date_only)
             weekly_count = (
                 db.query(Reservation)
                 .filter(
                     Reservation.userId == user_id,
+                    Reservation.isSameDayBooking.is_(False),
                     func.date(Reservation.date) >= week_start,
                     func.date(Reservation.date) <= week_end,
                 )
                 .count()
             )
             if weekly_count >= 1:
-                raise ApiError("WEEKLY_LIMIT", "이번 주(월~일) 예약은 1회만 가능합니다.")
+                raise ApiError("WEEKLY_LIMIT", "이번 주(월~일) 기본 예약은 1회만 가능합니다.")
+
+        if not is_admin and mark_as_bonus:
+            bonus_count = (
+                db.query(Reservation)
+                .filter(
+                    Reservation.userId == user_id,
+                    Reservation.isSameDayBooking.is_(True),
+                    func.date(Reservation.date) == date_only,
+                )
+                .count()
+            )
+            if bonus_count >= 1:
+                raise ApiError("BONUS_LIMIT", "내일 추가 예약은 1회만 가능합니다.")
 
         reservation = Reservation(
             userId=user_id,
             date=date_to_datetime(date_only),
             startHour=start_hour,
             endHour=start_hour + 1,
-            isSameDayBooking=False,
+            isSameDayBooking=mark_as_bonus,
         )
         db.add(reservation)
         db.commit()
