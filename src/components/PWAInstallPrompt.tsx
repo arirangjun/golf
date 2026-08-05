@@ -14,6 +14,7 @@ function isStandalone(): boolean {
   if (typeof window === "undefined") return false;
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: window-controls-overlay)").matches ||
     ("standalone" in navigator &&
       Boolean((navigator as Navigator & { standalone?: boolean }).standalone))
   );
@@ -22,6 +23,13 @@ function isStandalone(): boolean {
 function isIos(): boolean {
   if (typeof window === "undefined") return false;
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function isDesktop(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent.toLowerCase();
+  const mobile = /android|iphone|ipad|ipod|mobile|windows phone/i.test(ua);
+  return !mobile && window.matchMedia("(pointer: fine)").matches;
 }
 
 function detectInAppBrowser(): InAppKind {
@@ -33,10 +41,7 @@ function detectInAppBrowser(): InAppKind {
   if (ua.includes("instagram")) return "instagram";
   if (ua.includes("fban") || ua.includes("fbav") || ua.includes("fb_iab")) return "facebook";
   if (ua.includes("line/")) return "line";
-
-  // 일반 WebView 휴리스틱 (Android)
   if (ua.includes("; wv)") || ua.includes("webview")) return "other";
-
   return null;
 }
 
@@ -60,17 +65,13 @@ function inAppLabel(kind: InAppKind): string {
 function openInExternalBrowser() {
   const url = window.location.href;
   const ua = navigator.userAgent.toLowerCase();
-  const ios = isIos();
 
-  // 카카오톡: 외부 브라우저 스킴
   if (ua.includes("kakaotalk")) {
-    if (ios) {
-      // iOS는 스킴이 불안정해 안내 위주 — 클립보드 복사 보조
+    if (isIos()) {
       void navigator.clipboard?.writeText(url);
       window.location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`;
       return;
     }
-    // Android Chrome intent
     const hostPath = url.replace(/^https?:\/\//, "");
     window.location.href =
       `intent://${hostPath}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
@@ -88,12 +89,16 @@ export function PWAInstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
   const [iosHint, setIosHint] = useState(false);
+  const [desktop, setDesktop] = useState(false);
   const [inApp, setInApp] = useState<InAppKind>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (isStandalone()) return;
     if (localStorage.getItem(storageKey) === "1") return;
+
+    const desktopEnv = isDesktop();
+    setDesktop(desktopEnv);
 
     const inAppKind = detectInAppBrowser();
     if (inAppKind) {
@@ -116,9 +121,11 @@ export function PWAInstallPrompt() {
 
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
 
+    // PC는 더 빨리 안내 (Chrome/Edge 설치 가능)
+    const delayMs = desktopEnv ? 800 : 2500;
     const timer = window.setTimeout(() => {
-      setVisible((current) => current || true);
-    }, 2500);
+      setVisible(true);
+    }, delayMs);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
@@ -167,10 +174,14 @@ export function PWAInstallPrompt() {
     ? "bg-teal-700 hover:bg-teal-800"
     : "bg-primary-600 hover:bg-primary-700";
 
+  const shellClass = desktop
+    ? "pointer-events-none fixed bottom-6 right-6 z-50 flex justify-end p-0"
+    : "pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center p-4";
+
   if (inApp) {
     const name = inAppLabel(inApp);
     return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center p-4">
+      <div className={shellClass}>
         <div
           className={`pointer-events-auto w-full max-w-md rounded-2xl border p-4 shadow-lg ${accent}`}
           role="dialog"
@@ -227,7 +238,7 @@ export function PWAInstallPrompt() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center p-4">
+    <div className={shellClass}>
       <div
         className={`pointer-events-auto w-full max-w-md rounded-2xl border p-4 shadow-lg ${accent}`}
         role="dialog"
@@ -235,11 +246,22 @@ export function PWAInstallPrompt() {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">{appName} 앱으로 설치</p>
+            <p className="text-sm font-semibold">
+              {desktop ? `${appName} PC 앱으로 설치` : `${appName} 앱으로 설치`}
+            </p>
             {iosHint ? (
               <p className="mt-1 text-xs leading-relaxed opacity-80">
                 Safari 하단 <span className="font-semibold">공유</span> →{" "}
                 <span className="font-semibold">홈 화면에 추가</span>를 눌러 설치하세요.
+              </p>
+            ) : desktop && deferred ? (
+              <p className="mt-1 text-xs leading-relaxed opacity-80">
+                설치하면 작업 표시줄·시작 메뉴에서 바로 실행할 수 있습니다.
+              </p>
+            ) : desktop ? (
+              <p className="mt-1 text-xs leading-relaxed opacity-80">
+                Chrome/Edge 주소창 오른쪽 <span className="font-semibold">설치 아이콘(⊕)</span>을
+                누르거나, 메뉴 → <span className="font-semibold">앱 설치</span>를 선택하세요.
               </p>
             ) : deferred ? (
               <p className="mt-1 text-xs leading-relaxed opacity-80">
@@ -268,7 +290,7 @@ export function PWAInstallPrompt() {
             onClick={install}
             className={`mt-3 w-full rounded-xl py-2.5 text-sm font-medium text-white ${buttonClass}`}
           >
-            설치하기
+            {desktop ? "PC에 설치하기" : "설치하기"}
           </button>
         )}
       </div>
