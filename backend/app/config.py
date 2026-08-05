@@ -20,7 +20,9 @@ class Settings(BaseSettings):
         validation_alias="FRONTEND_URL",
     )
     cookie_name: str = "golf_session"
-    cookie_max_age: int = 60 * 60 * 24 * 7
+    # 브라우저 제한까지 사실상 무제한 유지 (약 100년)
+    cookie_max_age: int | None = None
+    jwt_never_expire: bool = True
 
     def _build_mysql_url(self) -> str:
         if self.database_url:

@@ -24,7 +24,6 @@ export async function createSession(user: SessionUser): Promise<void> {
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
     .sign(secret);
 
   const cookieStore = await cookies();
@@ -33,7 +32,7 @@ export async function createSession(user: SessionUser): Promise<void> {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: 60 * 60 * 24 * 365 * 100, // 사실상 무제한
   });
 }
 

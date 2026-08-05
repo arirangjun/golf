@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from datetime import timedelta
 
 import jwt
 from fastapi import Response
@@ -26,15 +25,20 @@ def _encode_token(user: SessionUser) -> str:
         "email": user.email,
         "name": user.name,
         "role": user.role.value,
-        "exp": now_kst() + timedelta(seconds=settings.cookie_max_age),
         "iat": now_kst(),
     }
+    # 만료 없음 (로그아웃 전까지 유지)
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 
 
 def decode_token(token: str) -> SessionUser | None:
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=["HS256"],
+            options={"verify_exp": False},
+        )
         return SessionUser(
             id=payload["id"],
             email=payload["email"],
@@ -47,6 +51,9 @@ def decode_token(token: str) -> SessionUser | None:
 
 def set_session_cookie(response: Response, user: SessionUser) -> None:
     token = _encode_token(user)
+    # max_age=None → 세션 쿠키가 아니라 사실상 영구 쿠키로 두려면 매우 큰 값 사용
+    # Chrome 등은 상한이 있어 약 400일로 잘릴 수 있음. JWT 자체는 만료 없음.
+    forever = 60 * 60 * 24 * 365 * 100  # 100년
     response.set_cookie(
         key=settings.cookie_name,
         value=token,
@@ -54,7 +61,7 @@ def set_session_cookie(response: Response, user: SessionUser) -> None:
         secure=settings.is_production,
         samesite="lax",
         path="/",
-        max_age=settings.cookie_max_age,
+        max_age=forever,
     )
 
 
