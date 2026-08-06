@@ -30,7 +30,10 @@ async def lifespan(_app: FastAPI):
         result = init_database()
         print(f"DB ready: {result}")
     except Exception as exc:  # noqa: BLE001
-        print(f"Warning: DB init/seed failed: {exc}")
+        import traceback
+
+        print(f"Warning: DB init/seed failed: {type(exc).__name__}: {exc!r}")
+        traceback.print_exc()
     yield
 
 
@@ -82,7 +85,11 @@ def setup_seed():
             },
         }
     except Exception as exc:  # noqa: BLE001
-        raise ApiError("INTERNAL_ERROR", f"DB 시드 실패: {exc}", 500) from exc
+        raise ApiError(
+            "INTERNAL_ERROR",
+            f"DB 시드 실패: {type(exc).__name__}: {exc!r}",
+            500,
+        ) from exc
 
 
 @setup_router.get("/status")
@@ -99,7 +106,11 @@ def setup_status():
     except Exception as exc:  # noqa: BLE001
         return JSONResponse(
             status_code=503,
-            content={"ok": False, "database": "error", "message": str(exc)},
+            content={
+                "ok": False,
+                "database": "error",
+                "message": f"{type(exc).__name__}: {exc!r}",
+            },
         )
 
 
