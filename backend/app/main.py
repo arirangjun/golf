@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import Base, SessionLocal, get_engine
+from app import database
+from app.database import Base, get_engine
 from app.exceptions import ApiError, api_error_handler
 from app.models import Reservation, User  # noqa: F401 — register metadata
 from app.routers import admin, auth, reservations, slots
@@ -16,8 +17,8 @@ from app.services.seed_service import seed_default_accounts
 def init_database() -> dict:
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
-    assert SessionLocal is not None
-    db = SessionLocal()
+    assert database.SessionLocal is not None
+    db = database.SessionLocal()
     try:
         return seed_default_accounts(db)
     finally:
@@ -96,8 +97,8 @@ def setup_seed():
 def setup_status():
     try:
         get_engine()
-        assert SessionLocal is not None
-        db = SessionLocal()
+        assert database.SessionLocal is not None
+        db = database.SessionLocal()
         try:
             count = db.query(User).count()
             return {"ok": True, "userCount": count, "database": "connected"}
@@ -127,15 +128,15 @@ def health():
     db_message = "not_checked"
     try:
         get_engine()
-        assert SessionLocal is not None
-        db = SessionLocal()
+        assert database.SessionLocal is not None
+        db = database.SessionLocal()
         try:
             db_ok = db.query(User).count() >= 0
             db_message = "connected"
         finally:
             db.close()
     except Exception as exc:  # noqa: BLE001
-        db_message = str(exc)
+        db_message = f"{type(exc).__name__}: {exc!r}"
 
     return {
         "ok": True,
