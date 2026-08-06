@@ -267,16 +267,16 @@ export function AdminReservationsPanel() {
         {loading ? (
           <p className="py-12 text-center text-gray-500">로딩 중...</p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <div className="max-h-[600px] overflow-auto rounded-xl border border-gray-200">
             <div className="min-w-[640px]">
-              <div className="sticky top-0 z-10 grid grid-cols-[52px_repeat(7,1fr)] border-b bg-gray-50">
-                <div className="border-r px-1 py-2 text-center text-xs font-medium text-gray-400">
+              <div className="sticky top-0 z-20 grid grid-cols-[52px_repeat(7,1fr)] border-b bg-gray-50">
+                <div className="sticky left-0 z-30 border-r bg-gray-50 px-1 py-2 text-center text-xs font-medium text-gray-400">
                   시간
                 </div>
                 {weekDays.map((day, idx) => (
                   <div
                     key={day.date}
-                    className="border-r px-1 py-2 text-center last:border-r-0"
+                    className="border-r bg-gray-50 px-1 py-2 text-center last:border-r-0"
                   >
                     <p className="text-sm font-bold text-gray-900">{DAY_LABELS[idx]}</p>
                     <p className="text-xs text-gray-500">
@@ -286,52 +286,50 @@ export function AdminReservationsPanel() {
                 ))}
               </div>
 
-              <div className="max-h-[600px] overflow-y-auto">
-                {HOURS.map((hour) => (
-                  <div
-                    key={hour}
-                    className="grid grid-cols-[52px_repeat(7,1fr)] border-b last:border-b-0"
-                  >
-                    <div className="sticky left-0 z-[1] flex items-center justify-center border-r bg-gray-50 px-1 py-0 text-[11px] font-medium text-gray-500">
-                      {formatHour(hour)}
-                    </div>
-                    {weekDays.map((day, dayIdx) => {
-                      const slot = slotMap.get(`${day.date}-${hour}`);
-                      const label = getCellLabel(slot);
-                      const clickable = Boolean(
-                        slot?.reservationId || slot?.available
-                      );
-
-                      return (
-                        <button
-                          key={`${day.date}-${hour}`}
-                          type="button"
-                          disabled={!clickable}
-                          onClick={() => slot && handleCellClick(day.date, slot)}
-                          title={
-                            slot?.reservationId
-                              ? `${slot.displayLabel} · 클릭하여 취소`
-                              : slot?.available
-                                ? "클릭하여 예약"
-                                : "예약 불가"
-                          }
-                          className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
-                        >
-                          <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[9px] text-gray-400/50 select-none sm:text-[10px]">
-                            <span>{DAY_LABELS[dayIdx]}</span>
-                            <span>{formatHour(hour)}</span>
-                          </span>
-                          {label && (
-                            <span className="relative z-[1] block truncate font-medium text-red-600">
-                              {label}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  className="grid grid-cols-[52px_repeat(7,1fr)] border-b last:border-b-0"
+                >
+                  <div className="sticky left-0 z-10 flex items-center justify-center border-r bg-gray-50 px-1 py-0 text-[11px] font-medium text-gray-500">
+                    {formatHour(hour)}
                   </div>
-                ))}
-              </div>
+                  {weekDays.map((day, dayIdx) => {
+                    const slot = slotMap.get(`${day.date}-${hour}`);
+                    const label = getCellLabel(slot);
+                    const clickable = Boolean(
+                      slot?.reservationId || slot?.available
+                    );
+
+                    return (
+                      <button
+                        key={`${day.date}-${hour}`}
+                        type="button"
+                        disabled={!clickable}
+                        onClick={() => slot && handleCellClick(day.date, slot)}
+                        title={
+                          slot?.reservationId
+                            ? `${slot.displayLabel} · 클릭하여 취소`
+                            : slot?.available
+                              ? "클릭하여 예약"
+                              : "예약 불가"
+                        }
+                        className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
+                      >
+                        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[11px] text-gray-400/70 select-none sm:text-xs">
+                          <span>{DAY_LABELS[dayIdx]}</span>
+                          <span>{formatHour(hour)}</span>
+                        </span>
+                        {label && (
+                          <span className="relative z-[1] block truncate font-medium text-red-600">
+                            {label}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         )}

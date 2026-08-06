@@ -47,6 +47,14 @@ function isPastSlot(dateStr: string, hour: number): boolean {
   return isPastSlotKST(dateStr, hour);
 }
 
+function isMobileDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(max-width: 639px)").matches ||
+    /android|iphone|ipad|ipod|mobile|windows phone/i.test(navigator.userAgent)
+  );
+}
+
 export function ReservationCalendar() {
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [weekDays, setWeekDays] = useState<DaySlots[]>([]);
@@ -128,6 +136,12 @@ export function ReservationCalendar() {
     }
 
     if (!slot.available || !slot.isOperating || isPastSlot(date, slot.startHour)) return;
+
+    if (isMobileDevice()) {
+      const dayIdx = weekDays.findIndex((d) => d.date === date);
+      const dayLabel = dayIdx >= 0 ? `${DAY_LABELS[dayIdx]}요일` : date;
+      if (!confirm(`${dayLabel} ${formatHour(slot.startHour)} 예약하시겠습니까?`)) return;
+    }
 
     const res = await fetch("/api/reservations", {
       method: "POST",
@@ -252,17 +266,17 @@ export function ReservationCalendar() {
         {loading ? (
           <p className="py-12 text-center text-gray-500">로딩 중...</p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <div className="max-h-[600px] overflow-auto rounded-xl border border-gray-200">
             <div className="min-w-[640px]">
-              {/* Header: 요일 1행 */}
-              <div className="sticky top-0 z-10 grid grid-cols-[52px_repeat(7,1fr)] border-b bg-gray-50">
-                <div className="border-r px-1 py-2 text-center text-xs font-medium text-gray-400">
+              {/* Header: 요일 1행 — 세로 스크롤 시 고정 */}
+              <div className="sticky top-0 z-20 grid grid-cols-[52px_repeat(7,1fr)] border-b bg-gray-50">
+                <div className="sticky left-0 z-30 border-r bg-gray-50 px-1 py-2 text-center text-xs font-medium text-gray-400">
                   시간
                 </div>
                 {weekDays.map((day, idx) => (
                   <div
                     key={day.date}
-                    className="border-r px-1 py-2 text-center last:border-r-0"
+                    className="border-r bg-gray-50 px-1 py-2 text-center last:border-r-0"
                   >
                     <p className="text-sm font-bold text-gray-900">{DAY_LABELS[idx]}</p>
                     <p className="text-xs text-gray-500">
@@ -272,59 +286,57 @@ export function ReservationCalendar() {
                 ))}
               </div>
 
-              {/* Body: 0~23시 세로 배치 */}
-              <div className="max-h-[600px] overflow-y-auto">
-                {HOURS.map((hour) => (
-                  <div
-                    key={hour}
-                    className="grid grid-cols-[52px_repeat(7,1fr)] border-b last:border-b-0"
-                  >
-                    <div className="sticky left-0 z-[1] flex items-center justify-center border-r bg-gray-50 px-1 py-0 text-[11px] font-medium text-gray-500">
-                      {formatHour(hour)}
-                    </div>
-                    {weekDays.map((day, dayIdx) => {
-                      const slot = slotMap.get(`${day.date}-${hour}`);
-                      const label = getCellLabel(slot);
-                      const clickable =
-                        slot?.isMine ||
-                        (slot?.available && !isPastSlot(day.date, hour));
-
-                      return (
-                        <button
-                          key={`${day.date}-${hour}`}
-                          type="button"
-                          disabled={!clickable}
-                          onClick={() => slot && handleCellClick(day.date, slot)}
-                          title={
-                            slot?.isMine
-                              ? "클릭하여 취소"
-                              : slot?.available
-                                ? "클릭하여 예약"
-                                : slot?.bookable === false
-                                  ? "예약 오픈 전"
-                                  : slot?.displayLabel ?? "예약 불가"
-                          }
-                          className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
-                        >
-                          <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[9px] text-gray-400/50 select-none sm:text-[10px]">
-                            <span>{DAY_LABELS[dayIdx]}</span>
-                            <span>{formatHour(hour)}</span>
-                          </span>
-                          {label && (
-                            <span
-                              className={`relative z-[1] block truncate font-medium ${
-                                slot?.isMine ? "text-primary-700" : "text-red-600"
-                              }`}
-                            >
-                              {label}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+              {/* Body: 0~23시 세로 배치 — 시간열은 가로 스크롤 시 고정 */}
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  className="grid grid-cols-[52px_repeat(7,1fr)] border-b last:border-b-0"
+                >
+                  <div className="sticky left-0 z-10 flex items-center justify-center border-r bg-gray-50 px-1 py-0 text-[11px] font-medium text-gray-500">
+                    {formatHour(hour)}
                   </div>
-                ))}
-              </div>
+                  {weekDays.map((day, dayIdx) => {
+                    const slot = slotMap.get(`${day.date}-${hour}`);
+                    const label = getCellLabel(slot);
+                    const clickable =
+                      slot?.isMine ||
+                      (slot?.available && !isPastSlot(day.date, hour));
+
+                    return (
+                      <button
+                        key={`${day.date}-${hour}`}
+                        type="button"
+                        disabled={!clickable}
+                        onClick={() => slot && handleCellClick(day.date, slot)}
+                        title={
+                          slot?.isMine
+                            ? "클릭하여 취소"
+                            : slot?.available
+                              ? "클릭하여 예약"
+                              : slot?.bookable === false
+                                ? "예약 오픈 전"
+                                : slot?.displayLabel ?? "예약 불가"
+                        }
+                        className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
+                      >
+                        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[11px] text-gray-400/70 select-none sm:text-xs">
+                          <span>{DAY_LABELS[dayIdx]}</span>
+                          <span>{formatHour(hour)}</span>
+                        </span>
+                        {label && (
+                          <span
+                            className={`relative z-[1] block truncate font-medium ${
+                              slot?.isMine ? "text-primary-700" : "text-red-600"
+                            }`}
+                          >
+                            {label}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         )}
