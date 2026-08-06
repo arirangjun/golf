@@ -1,4 +1,4 @@
-const CACHE_NAME = "golf-admin-v1";
+const CACHE_NAME = "golf-admin-v2";
 const STATIC_ASSETS = ["/admin", "/admin/manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -33,16 +33,31 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (request.mode === "navigate" || request.destination === "document") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || Response.error()))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
+      const networked = fetch(request).then((response) => {
         if (request.method === "GET" && response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return response;
       });
+      return cached || networked;
     })
   );
 });
