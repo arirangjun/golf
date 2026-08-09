@@ -17,7 +17,13 @@ from app.services.formatting import (
     verify_password,
 )
 
-__all__ = ["authenticate_member", "create_member", "import_members", "count_members_with_unit_password"]
+__all__ = [
+    "authenticate_member",
+    "change_member_password",
+    "create_member",
+    "import_members",
+    "count_members_with_unit_password",
+]
 
 
 @dataclass
@@ -75,6 +81,32 @@ def count_members_with_unit_password(
         query = query.filter(User.id != exclude_user_id)
     users = query.all()
     return sum(1 for user in users if verify_password(plain_password, user.passwordHash))
+
+
+def change_member_password(
+    db: Session, user_id: str, current_password: str, new_password: str
+) -> None:
+    user = db.query(User).filter(User.id == user_id, User.role == Role.USER).first()
+    if not user or not user.isActive:
+        raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
+
+    if not verify_password(current_password, user.passwordHash):
+        raise ApiError("VALIDATION_ERROR", "현재 비밀번호가 올바르지 않습니다.")
+
+    new_plain = new_password.strip()
+    if not new_plain:
+        raise ApiError("VALIDATION_ERROR", "새 비밀번호를 입력해 주세요.")
+    if new_plain == current_password:
+        raise ApiError("VALIDATION_ERROR", "새 비밀번호는 현재 비밀번호와 달라야 합니다.")
+
+    if count_members_with_unit_password(db, user.dong, user.ho, new_plain, user.id) > 0:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "같은 동·호수에 이미 동일 비밀번호를 사용하는 회원이 있습니다.",
+        )
+
+    user.passwordHash = hash_password(new_plain)
+    db.commit()
 
 
 def _format_created(user: User, reservation_count: int = 0) -> CreatedMember:

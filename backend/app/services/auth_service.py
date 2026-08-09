@@ -139,3 +139,4 @@ def require_member(db: Session, token: str | None) -> SessionUser:
     if not user or not user.isActive:
         raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
     return session
+

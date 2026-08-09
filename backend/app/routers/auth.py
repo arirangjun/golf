@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, EmailStr, Field
 
-from app.dependencies import DbSession, SessionToken
+from app.dependencies import DbSession, SessionToken, member_user
 from app.services.auth_service import (
+    SessionUser,
     authenticate_admin,
     authenticate_member,
     clear_session_cookie,
@@ -10,6 +11,7 @@ from app.services.auth_service import (
     set_session_cookie,
     to_session_user,
 )
+from app.services.member_service import change_member_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -76,3 +78,18 @@ def me(token: SessionToken):
             "role": session.role.value,
         }
     }
+
+
+class ChangePasswordBody(BaseModel):
+    currentPassword: str = Field(min_length=1)
+    newPassword: str = Field(min_length=1)
+
+
+@router.post("/change-password")
+def change_password(
+    body: ChangePasswordBody,
+    db: DbSession,
+    session: SessionUser = Depends(member_user),
+):
+    change_member_password(db, session.id, body.currentPassword, body.newPassword)
+    return {"ok": True, "message": "비밀번호가 변경되었습니다."}
