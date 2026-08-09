@@ -47,14 +47,6 @@ function isPastSlot(dateStr: string, hour: number): boolean {
   return isPastSlotKST(dateStr, hour);
 }
 
-function isMobileDevice(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(max-width: 639px)").matches ||
-    /android|iphone|ipad|ipod|mobile|windows phone/i.test(navigator.userAgent)
-  );
-}
-
 export function ReservationCalendar() {
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [weekDays, setWeekDays] = useState<DaySlots[]>([]);
@@ -136,12 +128,6 @@ export function ReservationCalendar() {
     }
 
     if (!slot.available || !slot.isOperating || isPastSlot(date, slot.startHour)) return;
-
-    if (isMobileDevice()) {
-      const dayIdx = weekDays.findIndex((d) => d.date === date);
-      const dayLabel = dayIdx >= 0 ? `${DAY_LABELS[dayIdx]}요일` : date;
-      if (!confirm(`${dayLabel} ${formatHour(slot.startHour)} 예약하시겠습니까?`)) return;
-    }
 
     const res = await fetch("/api/reservations", {
       method: "POST",
