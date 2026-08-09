@@ -160,7 +160,9 @@ export function ReservationCalendar() {
 
   const getCellClass = (date: string, slot: Slot | undefined) => {
     if (!slot) return "bg-gray-50";
-    if (isPastSlot(date, slot.startHour)) return "bg-gray-50 cursor-not-allowed opacity-50";
+    if (isPastSlot(date, slot.startHour)) {
+      return "slot-past bg-gray-50 cursor-not-allowed";
+    }
     if (slot.isMine) return "bg-primary-100 border-primary-400 cursor-pointer hover:bg-primary-200";
     if (!slot.available) {
       if (slot.isOperating && slot.bookable === false) {
@@ -237,7 +239,8 @@ export function ReservationCalendar() {
             <span className="inline-block h-3 w-3 rounded border bg-gray-100" /> 예약 오픈 전
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded bg-gray-50" /> 과거 시간
+            <span className="slot-past inline-block h-3 w-3 rounded border border-gray-200 bg-gray-50" />{" "}
+            과거 시간
           </span>
         </div>
 
