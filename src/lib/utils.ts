@@ -47,15 +47,14 @@ function isWeekdayKST(now: Date): boolean {
 
 /**
  * Bookable period:
- * - Weekdays (Mon–Fri): this week + next week (no Sat 14:00 wait)
+ * - Weekdays (Mon–Fri): this week only (no Sat 14:00 wait)
  * - Weekend (Sat–Sun): week opened at the most recent Sat 14:00
  */
 export function getCurrentlyBookableWeekRange(
   now: Date = nowKST()
 ): { start: Date; end: Date } | null {
   if (isWeekdayKST(now)) {
-    const thisWeek = getWeekRange(toDateOnly(now));
-    return { start: thisWeek.start, end: addDays(thisWeek.start, 13) };
+    return getWeekRange(toDateOnly(now));
   }
 
   let saturday = isSaturday(now) ? toDateOnly(now) : previousSaturday(now);
@@ -99,7 +98,7 @@ export function formatBookingWindowMessage(now: Date = nowKST()): string {
   }
 
   if (isWeekdayKST(now)) {
-    return `예약 가능: ${format(range.start, "M/d", { locale: ko })} ~ ${format(range.end, "M/d", { locale: ko })} (주중에는 이번 주·다음 주 언제든 예약 가능)`;
+    return `예약 가능: ${format(range.start, "M/d", { locale: ko })} ~ ${format(range.end, "M/d", { locale: ko })} (주중에는 이번 주 언제든 예약 가능)`;
   }
   return `예약 가능 주간: ${format(range.start, "M/d", { locale: ko })} ~ ${format(range.end, "M/d", { locale: ko })} (주말: 토요일 ${BOOKING_OPEN_HOUR}:00 오픈)`;
 }

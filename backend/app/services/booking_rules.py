@@ -66,17 +66,15 @@ def get_currently_bookable_week_range(
 ) -> tuple[date, date] | None:
     """예약 가능 기간.
 
-    - 주중(월~금): 이번 주(월~일) + 다음 주(월~일) 상시 예약 가능
+    - 주중(월~금): 이번 주(월~일) 상시 예약 가능
     - 주말(토~일): 기존처럼 가장 최근 토요일 14:00에 열린 주간만 가능
     """
     current = now or now_kst()
     today = current.date()
 
-    # Mon=0 … Fri=4
+    # Mon=0 … Fri=4 — 이번 주만
     if today.weekday() < WEEKDAY_SATURDAY:
-        this_monday, _ = get_week_range(today)
-        next_sunday = this_monday + timedelta(days=13)
-        return this_monday, next_sunday
+        return get_week_range(today)
 
     saturday = today if today.weekday() == WEEKDAY_SATURDAY else _previous_saturday(today)
     open_time = _saturday_open_time(saturday)
@@ -123,7 +121,7 @@ def format_booking_window_message(now: datetime | None = None) -> str:
     if current.date().weekday() < WEEKDAY_SATURDAY:
         return (
             f"예약 가능: {start.month}/{start.day} ~ {end.month}/{end.day} "
-            f"(주중에는 이번 주·다음 주 언제든 예약 가능)"
+            f"(주중에는 이번 주 언제든 예약 가능)"
         )
     return (
         f"예약 가능 주간: {start.month}/{start.day} ~ {end.month}/{end.day} "

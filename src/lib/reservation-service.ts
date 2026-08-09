@@ -139,7 +139,7 @@ export async function createReservation(
     if (range) {
       throw new ApiError(
         "BOOKING_NOT_OPEN",
-        `현재 예약 가능한 기간은 ${formatDate(range.start)} ~ ${formatDate(range.end)} 입니다. 주중(월~금)에는 이번 주·다음 주를 언제든 예약할 수 있습니다.`
+        `현재 예약 가능한 기간은 ${formatDate(range.start)} ~ ${formatDate(range.end)} 입니다. 주중(월~금)에는 이번 주(월~일)를 언제든 예약할 수 있습니다.`
       );
     }
     const nextOpen = getNextBookingOpenTime(now);

@@ -150,7 +150,7 @@ def create_reservation(
             raise ApiError(
                 "BOOKING_NOT_OPEN",
                 f"현재 예약 가능한 기간은 {format_date(bookable[0])} ~ {format_date(bookable[1])} 입니다. "
-                "주중(월~금)에는 이번 주·다음 주를 언제든 예약할 수 있습니다.",
+                "주중(월~금)에는 이번 주(월~일)를 언제든 예약할 수 있습니다.",
             )
         next_open = get_next_booking_open_time(current)
         raise ApiError(
@@ -175,9 +175,8 @@ def create_reservation(
             )
 
     try:
-        conn = db.connection()
-        conn.execution_options(isolation_level="SERIALIZABLE")
-
+        # 동시 예약은 DB unique(date, startHour) + IntegrityError 로 방지
+        # (세션이 이미 시작된 뒤 isolation_level 변경 시 500 발생하므로 사용하지 않음)
         existing = (
             db.query(Reservation)
             .filter(func.date(Reservation.date) == date_only, Reservation.startHour == start_hour)
