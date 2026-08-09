@@ -23,7 +23,7 @@ export const OPERATING_END_HOUR = 24;
 /** After 21:00, one bonus booking for the next day is allowed */
 export const NEXT_DAY_BONUS_START_HOUR = 21;
 export const CANCELLATION_HOURS_BEFORE = 3;
-/** Every Saturday at 14:00, the following Mon–Sun week opens for booking */
+/** Weekend open hour: Saturday 14:00 (weekdays allow this+next week anytime) */
 export const BOOKING_OPEN_HOUR = 14;
 
 export function getWeekRange(date: Date): { start: Date; end: Date } {
@@ -40,10 +40,24 @@ function getSaturdayBookingOpenTime(saturday: Date): Date {
   );
 }
 
-/** Currently open bookable week (Mon–Sun), opened at the most recent Sat 14:00 */
+function isWeekdayKST(now: Date): boolean {
+  const day = toDateOnly(now).getDay(); // 0=Sun … 6=Sat
+  return day >= 1 && day <= 5;
+}
+
+/**
+ * Bookable period:
+ * - Weekdays (Mon–Fri): this week + next week (no Sat 14:00 wait)
+ * - Weekend (Sat–Sun): week opened at the most recent Sat 14:00
+ */
 export function getCurrentlyBookableWeekRange(
   now: Date = nowKST()
 ): { start: Date; end: Date } | null {
+  if (isWeekdayKST(now)) {
+    const thisWeek = getWeekRange(toDateOnly(now));
+    return { start: thisWeek.start, end: addDays(thisWeek.start, 13) };
+  }
+
   let saturday = isSaturday(now) ? toDateOnly(now) : previousSaturday(now);
   let openTime = getSaturdayBookingOpenTime(saturday);
 
@@ -84,7 +98,10 @@ export function formatBookingWindowMessage(now: Date = nowKST()): string {
     return `예약 오픈: ${format(nextOpen, "M월 d일 (EEE) HH:mm", { locale: ko })}부터`;
   }
 
-  return `예약 가능 주간: ${format(range.start, "M/d", { locale: ko })} ~ ${format(range.end, "M/d", { locale: ko })} (매주 토요일 ${BOOKING_OPEN_HOUR}:00 오픈)`;
+  if (isWeekdayKST(now)) {
+    return `예약 가능: ${format(range.start, "M/d", { locale: ko })} ~ ${format(range.end, "M/d", { locale: ko })} (주중에는 이번 주·다음 주 언제든 예약 가능)`;
+  }
+  return `예약 가능 주간: ${format(range.start, "M/d", { locale: ko })} ~ ${format(range.end, "M/d", { locale: ko })} (주말: 토요일 ${BOOKING_OPEN_HOUR}:00 오픈)`;
 }
 
 export function toDateOnly(date: Date): Date {

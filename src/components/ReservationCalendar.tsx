@@ -257,7 +257,7 @@ export function ReservationCalendar() {
 
         <div className="mb-3 rounded-lg bg-blue-50 px-4 py-3 text-xs text-blue-800">
           {bookingWindowMessage && <p className="mb-1 font-medium">• {bookingWindowMessage}</p>}
-          <p>• 매주 토요일 14:00부터 다음 주(월~일)만 예약 가능</p>
+          <p>• 주중(월~금): 이번 주·다음 주 언제든 예약 가능 · 주말: 토요일 14:00에 다음 주 오픈</p>
           <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 00:00~24:00 전 시간대 예약 가능</p>
           <p>• 21:00 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
           <p>• 취소: 예약 3시간 전까지 · 내 예약 셀 클릭으로 취소</p>
