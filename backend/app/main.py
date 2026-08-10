@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -11,7 +12,10 @@ from app.database import Base, get_engine
 from app.exceptions import ApiError, api_error_handler
 from app.models import Reservation, User  # noqa: F401 — register metadata
 from app.routers import admin, auth, reservations, slots
+from app.services.reservation_service import delete_expired_reservations
 from app.services.seed_service import seed_default_accounts
+
+RETENTION_CLEANUP_INTERVAL_SEC = 60 * 60 * 24  # 24h
 
 
 def init_database() -> dict:
@@ -25,8 +29,28 @@ def init_database() -> dict:
         db.close()
 
 
+def run_reservation_retention_cleanup() -> int:
+    assert database.SessionLocal is not None
+    db = database.SessionLocal()
+    try:
+        return delete_expired_reservations(db)
+    finally:
+        db.close()
+
+
+async def reservation_retention_loop() -> None:
+    while True:
+        await asyncio.sleep(RETENTION_CLEANUP_INTERVAL_SEC)
+        try:
+            deleted = await asyncio.to_thread(run_reservation_retention_cleanup)
+            print(f"Reservation retention cleanup: deleted={deleted}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"Warning: reservation retention cleanup failed: {type(exc).__name__}: {exc!r}")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    cleanup_task: asyncio.Task | None = None
     try:
         result = init_database()
         print(f"DB ready: {result}")
@@ -35,7 +59,25 @@ async def lifespan(_app: FastAPI):
 
         print(f"Warning: DB init/seed failed: {type(exc).__name__}: {exc!r}")
         traceback.print_exc()
-    yield
+
+    try:
+        deleted = run_reservation_retention_cleanup()
+        print(f"Reservation retention cleanup on startup: deleted={deleted}")
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"Warning: reservation retention cleanup on startup failed: "
+            f"{type(exc).__name__}: {exc!r}"
+        )
+
+    cleanup_task = asyncio.create_task(reservation_retention_loop())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Screen Golf Reservation API", lifespan=lifespan)

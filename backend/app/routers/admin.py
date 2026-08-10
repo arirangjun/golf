@@ -4,9 +4,6 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-
-from sqlalchemy.orm import joinedload
 
 from app.dependencies import DbSession, admin_user
 from app.exceptions import ApiError
@@ -30,6 +27,7 @@ from app.services.formatting import (
 from app.services.member_service import MemberInput, count_members_with_unit_password, create_member, import_members
 from app.services.reservation_service import (
     cancel_reservation,
+    count_user_reservations_within_retention,
     create_reservation,
     get_all_reservations,
     get_monthly_member_stats,
@@ -67,15 +65,10 @@ class AdminCreateReservationBody(BaseModel):
 
 @router.get("/users")
 def list_users(db: DbSession, _admin: SessionUser = Depends(admin_user)):
-    users = (
-        db.query(User)
-        .options(joinedload(User.reservations))
-        .order_by(User.createdAt.desc())
-        .all()
-    )
+    users = db.query(User).order_by(User.createdAt.desc()).all()
     result = []
     for user in users:
-        reservation_count = len(user.reservations)
+        reservation_count = count_user_reservations_within_retention(db, user.id)
         result.append(
             {
                 "id": user.id,

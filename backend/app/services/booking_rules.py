@@ -9,6 +9,7 @@ NEXT_DAY_BONUS_START_HOUR = 21
 CANCELLATION_HOURS_BEFORE = 3
 BOOKING_OPEN_HOUR = 14
 DEFAULT_MEMBER_PASSWORD = "1"
+RESERVATION_RETENTION_DAYS = 365
 
 WEEKDAY_SATURDAY = 5
 
@@ -32,6 +33,17 @@ def to_date_only(value: date | datetime) -> date:
     if isinstance(value, datetime):
         return ensure_kst(value).date()
     return value
+
+
+def retention_cutoff(now: date | datetime | None = None) -> date:
+    """예약 조회·보관 하한일 (이 날짜 미만은 삭제 대상)."""
+    if now is None:
+        base = today_kst()
+    elif isinstance(now, datetime):
+        base = to_date_only(now)
+    else:
+        base = now
+    return base - timedelta(days=RESERVATION_RETENTION_DAYS)
 
 
 def get_week_range(value: date | datetime) -> tuple[date, date]:

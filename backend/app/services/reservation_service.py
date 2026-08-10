@@ -24,6 +24,7 @@ from app.services.booking_rules import (
     is_operating_hour,
     is_same_day_extra_booking_allowed,
     now_kst,
+    retention_cutoff,
     to_date_only,
 )
 from app.services.formatting import format_member_display, format_phone
@@ -260,9 +261,13 @@ def cancel_reservation(
 
 
 def get_user_reservations(db: Session, user_id: str) -> list[Reservation]:
+    cutoff = retention_cutoff()
     return (
         db.query(Reservation)
-        .filter(Reservation.userId == user_id)
+        .filter(
+            Reservation.userId == user_id,
+            func.date(Reservation.date) >= cutoff,
+        )
         .order_by(Reservation.date.asc(), Reservation.startHour.asc())
         .all()
     )
@@ -271,12 +276,37 @@ def get_user_reservations(db: Session, user_id: str) -> list[Reservation]:
 def get_all_reservations(
     db: Session, from_date: date | None = None, to_date: date | None = None
 ) -> list[Reservation]:
+    cutoff = retention_cutoff()
+    effective_from = max(from_date, cutoff) if from_date else cutoff
     query = db.query(Reservation).options(joinedload(Reservation.user))
-    if from_date:
-        query = query.filter(func.date(Reservation.date) >= from_date)
+    query = query.filter(func.date(Reservation.date) >= effective_from)
     if to_date:
         query = query.filter(func.date(Reservation.date) <= to_date)
     return query.order_by(Reservation.date.asc(), Reservation.startHour.asc()).all()
+
+
+def count_user_reservations_within_retention(db: Session, user_id: str) -> int:
+    cutoff = retention_cutoff()
+    return (
+        db.query(Reservation)
+        .filter(
+            Reservation.userId == user_id,
+            func.date(Reservation.date) >= cutoff,
+        )
+        .count()
+    )
+
+
+def delete_expired_reservations(db: Session) -> int:
+    """1년 이전 예약 슬롯 날짜 기준 삭제. 삭제 건수 반환."""
+    cutoff = retention_cutoff()
+    deleted = (
+        db.query(Reservation)
+        .filter(func.date(Reservation.date) < cutoff)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(deleted or 0)
 
 
 def get_monthly_member_stats(db: Session, year: int, month: int) -> dict:
@@ -286,10 +316,23 @@ def get_monthly_member_stats(db: Session, year: int, month: int) -> dict:
     else:
         month_end = date(year, month + 1, 1) - timedelta(days=1)
 
+    cutoff = retention_cutoff()
+    if month_end < cutoff:
+        return {
+            "month": f"{year}-{month:02d}",
+            "members": [],
+            "totalReservations": 0,
+            "uniqueMembers": 0,
+        }
+
+    effective_start = max(month_start, cutoff)
     reservations = (
         db.query(Reservation)
         .options(joinedload(Reservation.user))
-        .filter(func.date(Reservation.date) >= month_start, func.date(Reservation.date) <= month_end)
+        .filter(
+            func.date(Reservation.date) >= effective_start,
+            func.date(Reservation.date) <= month_end,
+        )
         .all()
     )
 
@@ -328,9 +371,26 @@ def get_monthly_member_stats(db: Session, year: int, month: int) -> dict:
 
 
 def get_reservation_stats(db: Session, from_date: date, to_date: date) -> dict:
+    cutoff = retention_cutoff()
+    effective_from = max(to_date_only(from_date), cutoff)
+    effective_to = to_date_only(to_date)
+    if effective_to < effective_from:
+        return {
+            "daily": [],
+            "weekly": [],
+            "monthly": [],
+            "hourlyUtilization": [
+                {"hour": hour, "count": 0, "rate": 0} for hour in get_all_day_hours()
+            ],
+            "total": 0,
+        }
+
     reservations = (
         db.query(Reservation)
-        .filter(func.date(Reservation.date) >= from_date, func.date(Reservation.date) <= to_date)
+        .filter(
+            func.date(Reservation.date) >= effective_from,
+            func.date(Reservation.date) <= effective_to,
+        )
         .all()
     )
 
@@ -352,7 +412,7 @@ def get_reservation_stats(db: Session, from_date: date, to_date: date) -> dict:
 
         hourly_map[reservation.startHour] = hourly_map.get(reservation.startHour, 0) + 1
 
-    total_days = max(1, (to_date_only(to_date) - to_date_only(from_date)).days + 1)
+    total_days = max(1, (effective_to - effective_from).days + 1)
 
     return {
         "daily": [{"label": k, "count": v} for k, v in sorted(daily_map.items())],
