@@ -305,10 +305,12 @@ export function ReservationCalendar() {
                         }
                         className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
                       >
-                        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[11px] text-gray-400/70 select-none sm:text-xs">
-                          <span>{DAY_LABELS[dayIdx]}</span>
-                          <span>{formatHour(hour)}</span>
-                        </span>
+                        {!(slot?.isMine || slot?.reservationId) && (
+                          <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[11px] text-gray-400/70 select-none sm:text-xs">
+                            <span>{DAY_LABELS[dayIdx]}</span>
+                            <span>{formatHour(hour)}</span>
+                          </span>
+                        )}
                         {label && (
                           <span
                             className={`relative z-[1] block truncate font-medium ${
