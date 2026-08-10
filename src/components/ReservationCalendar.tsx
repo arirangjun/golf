@@ -173,8 +173,9 @@ export function ReservationCalendar() {
     return "bg-white hover:bg-primary-50 hover:border-primary-300 cursor-pointer";
   };
 
-  const getCellLabel = (slot: Slot | undefined) => {
+  const getCellLabel = (date: string, slot: Slot | undefined) => {
     if (!slot) return "";
+    if (isPastSlot(date, slot.startHour)) return "";
     if (slot.isMine) return "내 예약";
     if (!slot.available) return slot.displayLabel?.slice(0, 6) ?? "예약";
     return "";
@@ -286,7 +287,7 @@ export function ReservationCalendar() {
                   </div>
                   {weekDays.map((day, dayIdx) => {
                     const slot = slotMap.get(`${day.date}-${hour}`);
-                    const label = getCellLabel(slot);
+                    const label = getCellLabel(day.date, slot);
                     const clickable =
                       slot?.isMine ||
                       (slot?.available && !isPastSlot(day.date, hour));

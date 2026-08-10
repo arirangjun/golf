@@ -167,20 +167,17 @@ export function AdminReservationsPanel() {
 
   const getCellClass = (date: string, slot: Slot | undefined) => {
     if (!slot) return "bg-gray-50";
-    const past = isPastSlotKST(date, slot.startHour);
-    // 관리자: 과거 슬롯도 예약/취소 가능
+    // 관리자: 과거 슬롯도 예약/취소 가능 · 빗금 없음
     if (!slot.available && slot.reservationId) {
-      return past
-        ? "slot-past bg-red-50 border-red-100 cursor-pointer hover:opacity-90"
-        : "bg-red-50 border-red-100 cursor-pointer hover:bg-red-100";
+      return "bg-red-50 border-red-100 cursor-pointer hover:bg-red-100";
     }
-    if (past) return "slot-past bg-gray-50 cursor-pointer hover:opacity-90";
     if (!slot.available) return "bg-gray-50 cursor-not-allowed";
     return "bg-white hover:bg-primary-50 hover:border-primary-300 cursor-pointer";
   };
 
-  const getCellLabel = (slot: Slot | undefined) => {
+  const getCellLabel = (date: string, slot: Slot | undefined) => {
     if (!slot) return "";
+    if (isPastSlotKST(date, slot.startHour)) return "";
     if (!slot.available && slot.displayLabel) {
       return slot.displayLabel.slice(0, 8);
     }
@@ -259,10 +256,6 @@ export function AdminReservationsPanel() {
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded border bg-red-50" /> 예약됨 (클릭 취소)
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="slot-past inline-block h-3 w-3 rounded border border-gray-200 bg-gray-50" />{" "}
-            과거 시간
-          </span>
         </div>
 
         <div className="mb-3 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-900">
@@ -302,7 +295,7 @@ export function AdminReservationsPanel() {
                   </div>
                   {weekDays.map((day, dayIdx) => {
                     const slot = slotMap.get(`${day.date}-${hour}`);
-                    const label = getCellLabel(slot);
+                    const label = getCellLabel(day.date, slot);
                     const clickable = Boolean(
                       slot?.reservationId || slot?.available
                     );
