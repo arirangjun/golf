@@ -207,6 +207,14 @@ export function isNextDayBonusBookingAllowed(
   return isSameDay(targetDate, tomorrow);
 }
 
+/** 당일(오늘) 빈 슬롯 추가 예약 대상 */
+export function isSameDayExtraBookingAllowed(
+  targetDate: Date,
+  now: Date = nowKST()
+): boolean {
+  return isSameDay(toDateOnly(targetDate), toDateOnly(now));
+}
+
 export function parseDateInput(dateStr: string): Date {
   return parseDateKST(dateStr);
 }

@@ -1,14 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  format,
-  addWeeks,
-  subWeeks,
-  parseISO,
-} from "date-fns";
+import { format, addWeeks, subWeeks, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
-import { isPastSlotKST } from "@/lib/kst";
+import { formatDateKST, isPastSlotKST, nowKST } from "@/lib/kst";
 
 interface Slot {
   startHour: number;
@@ -249,6 +244,7 @@ export function ReservationCalendar() {
           {bookingWindowMessage && <p className="mb-1 font-medium">• {bookingWindowMessage}</p>}
           <p>• 주중(월~금): 이번 주(월~일) 언제든 예약 가능 · 주말: 토요일 14:00에 다음 주 오픈</p>
           <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 00:00~24:00 전 시간대 예약 가능</p>
+          <p>• 당일 빈 슬롯: 주간 예약과 별도로 추가 1회 예약 가능</p>
           <p>• 21:00 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
           <p>• 취소: 예약 3시간 전까지 · 내 예약 셀 클릭으로 취소</p>
         </div>
@@ -345,7 +341,11 @@ export function ReservationCalendar() {
                     {r.date} {r.timeLabel}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {r.isSameDayBooking ? "익일 추가 예약" : "기본 예약"}
+                    {r.isSameDayBooking
+                      ? r.date === formatDateKST(nowKST())
+                        ? "당일 추가 예약"
+                        : "익일 추가 예약"
+                      : "기본 예약"}
                     {!r.canCancel && " · 취소 불가 (3시간 이내)"}
                   </p>
                 </div>

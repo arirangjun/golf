@@ -12,6 +12,7 @@ import {
   getWeekRange,
   isOperatingHour,
   isNextDayBonusBookingAllowed,
+  isSameDayExtraBookingAllowed,
   canBookDate,
   getCurrentlyBookableWeekRange,
   getNextBookingOpenTime,
@@ -158,16 +159,16 @@ export async function createReservation(
   let markAsBonus = false;
 
   if (!isAdmin) {
+    const weeklyCount = await countWeeklyReservations(userId, dateOnly);
     if (isNextDayBonus) {
       markAsBonus = true;
-    } else {
-      const weeklyCount = await countWeeklyReservations(userId, dateOnly);
-      if (weeklyCount >= 1) {
-        throw new ApiError(
-          "WEEKLY_LIMIT",
-          "이번 주(월~일) 기본 예약은 1회만 가능합니다. 21:00 이후 내일 슬롯은 추가 1회 예약이 가능합니다."
-        );
-      }
+    } else if (isSameDayExtraBookingAllowed(dateOnly, now) && weeklyCount >= 1) {
+      markAsBonus = true;
+    } else if (weeklyCount >= 1) {
+      throw new ApiError(
+        "WEEKLY_LIMIT",
+        "이번 주(월~일) 기본 예약은 1회만 가능합니다. 당일 빈 슬롯은 추가 1회, 21:00 이후 내일 슬롯은 추가 1회 예약이 가능합니다."
+      );
     }
   }
 
@@ -214,7 +215,9 @@ export async function createReservation(
           if (bonusCount >= 1) {
             throw new ApiError(
               "BONUS_LIMIT",
-              "내일 추가 예약은 1회만 가능합니다."
+              isSameDayExtraBookingAllowed(dateOnly, now)
+                ? "당일 추가 예약은 1회만 가능합니다."
+                : "내일 추가 예약은 1회만 가능합니다."
             );
           }
         }

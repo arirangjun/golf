@@ -175,6 +175,14 @@ def is_next_day_bonus_booking_allowed(
     return to_date_only(target) == tomorrow
 
 
+def is_same_day_extra_booking_allowed(
+    target: date | datetime, now: datetime | None = None
+) -> bool:
+    """당일 빈 슬롯 추가 예약 대상인지 (오늘 날짜)."""
+    current = now or now_kst()
+    return to_date_only(target) == current.date()
+
+
 def date_to_datetime(d: date) -> datetime:
     """MySQL 저장용 naive datetime (KST wall clock 자정)."""
     return datetime(d.year, d.month, d.day, 0, 0, 0)

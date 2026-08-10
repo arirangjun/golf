@@ -22,6 +22,7 @@ from app.services.booking_rules import (
     get_week_range,
     is_next_day_bonus_booking_allowed,
     is_operating_hour,
+    is_same_day_extra_booking_allowed,
     now_kst,
     to_date_only,
 )
@@ -162,16 +163,19 @@ def create_reservation(
     if not user or not user.isActive:
         raise ApiError("USER_INACTIVE", "비활성화된 계정입니다.", 403)
 
-    # 회원: 주간 1회 + 21:00 이후 내일 잔여 슬롯 추가 1회
+    # 회원: 주간 1회 + 당일 빈 슬롯 추가 1회 + 21:00 이후 내일 추가 1회
     mark_as_bonus = False
     if not is_admin:
+        weekly_used = count_weekly_reservations(db, user_id, date_only) >= 1
         if is_next_day_bonus_booking_allowed(date_only, current):
             mark_as_bonus = True
-        elif count_weekly_reservations(db, user_id, date_only) >= 1:
+        elif is_same_day_extra_booking_allowed(date_only, current) and weekly_used:
+            mark_as_bonus = True
+        elif weekly_used:
             raise ApiError(
                 "WEEKLY_LIMIT",
                 "이번 주(월~일) 기본 예약은 1회만 가능합니다. "
-                "21:00 이후 내일 잔여 슬롯은 추가 1회 예약할 수 있습니다.",
+                "당일 빈 슬롯은 추가 1회, 21:00 이후 내일 슬롯은 추가 1회 예약할 수 있습니다.",
             )
 
     try:
@@ -211,6 +215,8 @@ def create_reservation(
                 .count()
             )
             if bonus_count >= 1:
+                if is_same_day_extra_booking_allowed(date_only, current):
+                    raise ApiError("BONUS_LIMIT", "당일 추가 예약은 1회만 가능합니다.")
                 raise ApiError("BONUS_LIMIT", "내일 추가 예약은 1회만 가능합니다.")
 
         reservation = Reservation(
