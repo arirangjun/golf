@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminReservationsPanel } from "@/components/admin/AdminReservationsPanel";
 import { AdminStatsPanel } from "@/components/admin/AdminStatsPanel";
@@ -12,6 +13,7 @@ type Tab = "users" | "reservations" | "stats";
 export function AdminDashboard() {
   const { user, logout } = useAuth();
   const [tab, setTab] = useState<Tab>("users");
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "users", label: "회원 관리" },
@@ -35,6 +37,14 @@ export function AdminDashboard() {
               예약 페이지
             </Link>
             <button
+              type="button"
+              onClick={() => setPasswordOpen(true)}
+              className="rounded-lg border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              비밀번호 변경
+            </button>
+            <button
+              type="button"
               onClick={() => logout()}
               className="rounded-lg border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
             >
@@ -65,6 +75,12 @@ export function AdminDashboard() {
         {tab === "reservations" && <AdminReservationsPanel />}
         {tab === "stats" && <AdminStatsPanel />}
       </div>
+
+      <ChangePasswordModal
+        open={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+        endpoint="/api/auth/change-admin-password"
+      />
     </div>
   );
 }

@@ -8,7 +8,7 @@ from app.config import settings
 from app.exceptions import ApiError
 from app.models import Role, User
 from app.services.booking_rules import now_kst
-from app.services.formatting import verify_password
+from app.services.formatting import hash_password, verify_password
 
 
 @dataclass
@@ -139,4 +139,24 @@ def require_member(db: Session, token: str | None) -> SessionUser:
     if not user or not user.isActive:
         raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
     return session
+
+
+def change_admin_password(
+    db: Session, user_id: str, current_password: str, new_password: str
+) -> None:
+    user = db.query(User).filter(User.id == user_id, User.role == Role.ADMIN).first()
+    if not user or not user.isActive:
+        raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
+
+    if not verify_password(current_password, user.passwordHash):
+        raise ApiError("VALIDATION_ERROR", "현재 비밀번호가 올바르지 않습니다.")
+
+    new_plain = new_password.strip()
+    if not new_plain:
+        raise ApiError("VALIDATION_ERROR", "새 비밀번호를 입력해 주세요.")
+    if new_plain == current_password:
+        raise ApiError("VALIDATION_ERROR", "새 비밀번호는 현재 비밀번호와 달라야 합니다.")
+
+    user.passwordHash = hash_password(new_plain)
+    db.commit()
 

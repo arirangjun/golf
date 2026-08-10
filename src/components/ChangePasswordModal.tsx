@@ -5,9 +5,15 @@ import { useState } from "react";
 interface ChangePasswordModalProps {
   open: boolean;
   onClose: () => void;
+  /** 기본: 회원용 /api/auth/change-password */
+  endpoint?: string;
 }
 
-export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps) {
+export function ChangePasswordModal({
+  open,
+  onClose,
+  endpoint = "/api/auth/change-password",
+}: ChangePasswordModalProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -38,7 +44,7 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/auth/change-password", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword, newPassword }),
