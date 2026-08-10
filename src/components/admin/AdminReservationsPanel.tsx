@@ -9,6 +9,7 @@ import {
 } from "date-fns";
 import { ko } from "date-fns/locale";
 import { isPastSlotKST } from "@/lib/kst";
+import { StatusMessageModal } from "@/components/StatusMessageModal";
 
 interface Slot {
   startHour: number;
@@ -237,17 +238,7 @@ export function AdminReservationsPanel() {
           </p>
         </div>
 
-        {message && (
-          <div
-            className={`mb-4 rounded-lg px-4 py-2 text-sm ${
-              message.type === "success"
-                ? "bg-green-50 text-green-700"
-                : "bg-red-50 text-red-600"
-            }`}
-          >
-            {message.text}
-          </div>
-        )}
+        <StatusMessageModal message={message} onClose={() => setMessage(null)} />
 
         <div className="mb-3 flex flex-wrap gap-3 text-xs text-gray-600">
           <span className="flex items-center gap-1.5">
