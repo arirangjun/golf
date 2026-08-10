@@ -94,8 +94,20 @@ def parse_member_excel(content: bytes) -> list[ImportRow]:
 
 def build_stats_export_buffer(data: dict) -> bytes:
     wb = Workbook()
-    summary = wb.active
-    summary.title = "요약"
+
+    # 기간별 예약 상세 (동/호수/이름/예약날짜)
+    detail = wb.active
+    detail.title = "예약내역"
+    detail.append(["동", "호수", "이름", "예약날짜", "시간"])
+    for row in data.get("reservations") or []:
+        detail.append([row["dong"], row["ho"], row["name"], row["date"], row["time"]])
+    detail.column_dimensions["A"].width = 10
+    detail.column_dimensions["B"].width = 10
+    detail.column_dimensions["C"].width = 12
+    detail.column_dimensions["D"].width = 14
+    detail.column_dimensions["E"].width = 10
+
+    summary = wb.create_sheet("요약")
     summary.append(["항목", "값"])
     summary.append(["조회 시작", data["from"]])
     summary.append(["조회 종료", data["to"]])

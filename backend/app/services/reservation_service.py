@@ -297,6 +297,42 @@ def count_user_reservations_within_retention(db: Session, user_id: str) -> int:
     )
 
 
+def get_reservation_export_rows(
+    db: Session, from_date: date, to_date: date
+) -> list[dict]:
+    """기간별 엑셀용: 동/호수/이름/예약날짜/시간."""
+    cutoff = retention_cutoff()
+    effective_from = max(to_date_only(from_date), cutoff)
+    effective_to = to_date_only(to_date)
+    if effective_to < effective_from:
+        return []
+
+    reservations = (
+        db.query(Reservation)
+        .options(joinedload(Reservation.user))
+        .filter(
+            func.date(Reservation.date) >= effective_from,
+            func.date(Reservation.date) <= effective_to,
+        )
+        .order_by(Reservation.date.asc(), Reservation.startHour.asc(), Reservation.userId.asc())
+        .all()
+    )
+
+    rows: list[dict] = []
+    for reservation in reservations:
+        user = reservation.user
+        rows.append(
+            {
+                "dong": user.dong if user else "",
+                "ho": user.ho if user else "",
+                "name": user.name if user else "",
+                "date": format_date(reservation.date),
+                "time": format_hour(reservation.startHour),
+            }
+        )
+    return rows
+
+
 def delete_expired_reservations(db: Session) -> int:
     """1년 이전 예약 슬롯 날짜 기준 삭제. 삭제 건수 반환."""
     cutoff = retention_cutoff()

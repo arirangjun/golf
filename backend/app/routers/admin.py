@@ -31,6 +31,7 @@ from app.services.reservation_service import (
     create_reservation,
     get_all_reservations,
     get_monthly_member_stats,
+    get_reservation_export_rows,
     get_reservation_stats,
     get_slots_for_week,
 )
@@ -326,6 +327,7 @@ def admin_stats_export(
     to_date = parse_date_input(to) if to else now_kst().date()
     from_date = parse_date_input(from_) if from_ else to_date - timedelta(days=30)
     stats = get_reservation_stats(db, from_date, to_date)
+    reservations = get_reservation_export_rows(db, from_date, to_date)
 
     member_stats = None
     if month:
@@ -345,6 +347,7 @@ def admin_stats_export(
             "monthly": stats["monthly"],
             "hourlyUtilization": stats["hourlyUtilization"],
             "memberStats": member_stats,
+            "reservations": reservations,
         }
     )
 
