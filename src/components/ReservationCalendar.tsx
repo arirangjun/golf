@@ -156,24 +156,37 @@ export function ReservationCalendar() {
 
   const getCellClass = (date: string, slot: Slot | undefined) => {
     if (!slot) return "bg-gray-50";
-    if (isPastSlot(date, slot.startHour)) {
-      return "slot-past bg-gray-50 cursor-not-allowed";
+    const past = isPastSlot(date, slot.startHour);
+    if (slot.isMine) {
+      return past
+        ? "slot-past bg-primary-100 border-primary-400 cursor-not-allowed"
+        : "bg-primary-100 border-primary-400 cursor-pointer hover:bg-primary-200";
     }
-    if (slot.isMine) return "bg-primary-100 border-primary-400 cursor-pointer hover:bg-primary-200";
     if (!slot.available) {
-      if (slot.isOperating && slot.bookable === false) {
-        return "bg-gray-100 border-gray-200 cursor-not-allowed opacity-60";
+      if (slot.reservationId || slot.displayLabel) {
+        return past
+          ? "slot-past bg-red-50 border-red-100 cursor-not-allowed"
+          : "bg-red-50 border-red-100 cursor-not-allowed";
       }
-      return "bg-red-50 border-red-100 cursor-not-allowed";
+      if (slot.isOperating && slot.bookable === false) {
+        return past
+          ? "slot-past bg-gray-100 border-gray-200 cursor-not-allowed opacity-60"
+          : "bg-gray-100 border-gray-200 cursor-not-allowed opacity-60";
+      }
+      return past
+        ? "slot-past bg-gray-50 cursor-not-allowed"
+        : "bg-gray-50 cursor-not-allowed";
     }
+    if (past) return "slot-past bg-gray-50 cursor-not-allowed";
     return "bg-white hover:bg-primary-50 hover:border-primary-300 cursor-pointer";
   };
 
-  const getCellLabel = (date: string, slot: Slot | undefined) => {
+  const getCellLabel = (_date: string, slot: Slot | undefined) => {
     if (!slot) return "";
-    if (isPastSlot(date, slot.startHour)) return "";
     if (slot.isMine) return "내 예약";
-    if (!slot.available) return slot.displayLabel?.slice(0, 6) ?? "예약";
+    if (slot.reservationId || (!slot.available && slot.displayLabel)) {
+      return slot.displayLabel?.slice(0, 6) ?? "예약";
+    }
     return "";
   };
 

@@ -8,7 +8,6 @@ import {
   parseISO,
 } from "date-fns";
 import { ko } from "date-fns/locale";
-import { isPastSlotKST } from "@/lib/kst";
 import { StatusMessageModal } from "@/components/StatusMessageModal";
 
 interface Slot {
@@ -176,9 +175,8 @@ export function AdminReservationsPanel() {
     return "bg-white hover:bg-primary-50 hover:border-primary-300 cursor-pointer";
   };
 
-  const getCellLabel = (date: string, slot: Slot | undefined) => {
+  const getCellLabel = (_date: string, slot: Slot | undefined) => {
     if (!slot) return "";
-    if (isPastSlotKST(date, slot.startHour)) return "";
     if (!slot.available && slot.displayLabel) {
       return slot.displayLabel.slice(0, 8);
     }
