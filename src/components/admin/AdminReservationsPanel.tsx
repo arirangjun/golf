@@ -28,12 +28,24 @@ interface DaySlots {
 interface AdminUser {
   id: string;
   name: string;
+  phone?: string;
   dong: string;
   ho: string;
   unitLabel: string;
   displayName: string;
   role: string;
   isActive: boolean;
+}
+
+interface PendingSlot {
+  date: string;
+  startHour: number;
+}
+
+function normalizeUnitPart(value: string, suffix: string) {
+  let v = value.trim();
+  if (v.endsWith(suffix)) v = v.slice(0, -suffix.length).trim();
+  return v;
 }
 
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
@@ -47,11 +59,15 @@ export function AdminReservationsPanel() {
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [weekDays, setWeekDays] = useState<DaySlots[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
     null
   );
+  const [pendingSlot, setPendingSlot] = useState<PendingSlot | null>(null);
+  const [dong, setDong] = useState("");
+  const [ho, setHo] = useState("");
+  const [matches, setMatches] = useState<AdminUser[] | null>(null);
+  const [booking, setBooking] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     const res = await fetch("/api/admin/users");
@@ -146,23 +162,74 @@ export function AdminReservationsPanel() {
 
     if (!slot.available || !slot.isOperating) return;
 
-    if (!selectedUserId) {
-      setMessage({ type: "error", text: "예약할 회원을 먼저 선택해 주세요." });
+    setPendingSlot({ date, startHour: slot.startHour });
+    setDong("");
+    setHo("");
+    setMatches(null);
+  };
+
+  const closeBookingModal = () => {
+    if (booking) return;
+    setPendingSlot(null);
+    setDong("");
+    setHo("");
+    setMatches(null);
+  };
+
+  const bookForUser = async (user: AdminUser, slot: PendingSlot) => {
+    setBooking(true);
+    try {
+      const res = await fetch("/api/admin/reservations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          date: slot.date,
+          startHour: slot.startHour,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPendingSlot(null);
+        setDong("");
+        setHo("");
+        setMatches(null);
+        setMessage({ type: "success", text: `${user.unitLabel} ${user.name} 예약이 등록되었습니다.` });
+        fetchWeek();
+      } else {
+        setMessage({ type: "error", text: data.error?.message ?? "예약 실패" });
+      }
+    } finally {
+      setBooking(false);
+    }
+  };
+
+  const handleFindMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingSlot) return;
+
+    const dongKey = normalizeUnitPart(dong, "동");
+    const hoKey = normalizeUnitPart(ho, "호");
+    if (!dongKey || !hoKey) {
+      setMessage({ type: "error", text: "동과 호수를 입력해 주세요." });
       return;
     }
 
-    const res = await fetch("/api/admin/reservations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: selectedUserId, date, startHour: slot.startHour }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setMessage({ type: "success", text: "예약이 등록되었습니다." });
-      fetchWeek();
-    } else {
-      setMessage({ type: "error", text: data.error?.message ?? "예약 실패" });
+    const found = users.filter(
+      (u) =>
+        normalizeUnitPart(u.dong, "동") === dongKey &&
+        normalizeUnitPart(u.ho, "호") === hoKey
+    );
+
+    if (found.length === 0) {
+      setMatches([]);
+      return;
     }
+    if (found.length === 1) {
+      await bookForUser(found[0], pendingSlot);
+      return;
+    }
+    setMatches(found);
   };
 
   const getCellClass = (date: string, slot: Slot | undefined) => {
@@ -215,26 +282,9 @@ export function AdminReservationsPanel() {
           </div>
         </div>
 
-        <div className="mb-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">예약 회원</label>
-            <select
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              className="min-w-[200px] rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="">회원 선택</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.unitLabel} {u.displayName.split(" ").slice(1).join(" ")}
-                </option>
-              ))}
-            </select>
-          </div>
-          <p className="text-xs text-gray-500">
-            빈 칸 클릭 → 예약 등록 · 예약된 칸 클릭 → 취소
-          </p>
-        </div>
+        <p className="mb-4 text-xs text-gray-500">
+          빈 칸 클릭 → 동·호수 입력 후 예약 · 예약된 칸 클릭 → 취소
+        </p>
 
         <StatusMessageModal message={message} onClose={() => setMessage(null)} />
 
@@ -249,7 +299,7 @@ export function AdminReservationsPanel() {
 
         <div className="mb-3 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-900">
           <p>• 관리자는 예약 오픈 시간·주간 제한 없이 예약/취소 가능</p>
-          <p>• 예약 등록 전 상단에서 회원을 선택하세요</p>
+          <p>• 빈 슬롯을 클릭한 뒤 동·호수를 입력하세요. 동일 세대가 여러 명이면 목록에서 선택합니다.</p>
         </div>
 
         {loading ? (
@@ -363,6 +413,110 @@ export function AdminReservationsPanel() {
           </ul>
         )}
       </div>
+
+      {pendingSlot && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={closeBookingModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-book-title"
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="admin-book-title" className="text-lg font-semibold text-gray-900">
+              예약 회원 입력
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              {pendingSlot.date} {formatHour(pendingSlot.startHour)}
+            </p>
+
+            {matches && matches.length > 1 ? (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm text-gray-700">
+                  동일 동·호수 회원이 {matches.length}명입니다. 예약할 회원을 선택하세요.
+                </p>
+                <ul className="max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-lg border">
+                  {matches.map((u) => (
+                    <li key={u.id}>
+                      <button
+                        type="button"
+                        disabled={booking}
+                        onClick={() => bookForUser(u, pendingSlot)}
+                        className="flex w-full items-center justify-between px-3 py-3 text-left text-sm hover:bg-primary-50 disabled:opacity-60"
+                      >
+                        <span className="font-medium text-gray-900">{u.name}</span>
+                        <span className="text-xs text-gray-500">
+                          {u.unitLabel}
+                          {u.phone ? ` · ${u.phone}` : ""}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  disabled={booking}
+                  onClick={() => setMatches(null)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  동·호수 다시 입력
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleFindMember} className="mt-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-1 block text-sm text-gray-700">동</span>
+                    <input
+                      value={dong}
+                      onChange={(e) => setDong(e.target.value)}
+                      autoFocus
+                      required
+                      placeholder="101"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm text-gray-700">호수</span>
+                    <input
+                      value={ho}
+                      onChange={(e) => setHo(e.target.value)}
+                      required
+                      placeholder="1001"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                    />
+                  </label>
+                </div>
+                {matches && matches.length === 0 && (
+                  <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                    해당 동·호수의 회원을 찾을 수 없습니다.
+                  </p>
+                )}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={closeBookingModal}
+                    disabled={booking}
+                    className="rounded-lg border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={booking}
+                    className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
+                  >
+                    {booking ? "예약 중..." : "확인"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
