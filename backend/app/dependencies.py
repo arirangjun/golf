@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.services.auth_service import SessionUser, require_admin, require_member
+from app.services.auth_service import SessionUser, require_admin, require_member, require_active_user
 
 
 def get_session_token(
@@ -24,3 +24,7 @@ def member_user(db: DbSession, token: SessionToken) -> SessionUser:
 
 def admin_user(db: DbSession, token: SessionToken) -> SessionUser:
     return require_admin(db, token)
+
+
+def active_user(db: DbSession, token: SessionToken) -> SessionUser:
+    return require_active_user(db, token)

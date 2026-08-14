@@ -141,6 +141,14 @@ def require_member(db: Session, token: str | None) -> SessionUser:
     return session
 
 
+def require_active_user(db: Session, token: str | None) -> SessionUser:
+    session = require_session(token)
+    user = db.query(User).filter(User.id == session.id).first()
+    if not user or not user.isActive:
+        raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
+    return session
+
+
 def change_admin_password(
     db: Session, user_id: str, current_password: str, new_password: str
 ) -> None:

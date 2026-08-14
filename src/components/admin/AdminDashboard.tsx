@@ -6,9 +6,10 @@ import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminReservationsPanel } from "@/components/admin/AdminReservationsPanel";
 import { AdminStatsPanel } from "@/components/admin/AdminStatsPanel";
+import { SuggestionBoard } from "@/components/SuggestionBoard";
 import { useState } from "react";
 
-type Tab = "users" | "reservations" | "stats";
+type Tab = "users" | "reservations" | "stats" | "suggestions";
 
 export function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -19,6 +20,7 @@ export function AdminDashboard() {
     { id: "users", label: "회원 관리" },
     { id: "reservations", label: "예약 관리" },
     { id: "stats", label: "통계/집계" },
+    { id: "suggestions", label: "건의" },
   ];
 
   return (
@@ -74,6 +76,7 @@ export function AdminDashboard() {
         {tab === "users" && <AdminUsersPanel />}
         {tab === "reservations" && <AdminReservationsPanel />}
         {tab === "stats" && <AdminStatsPanel />}
+        {tab === "suggestions" && <SuggestionBoard />}
       </div>
 
       <ChangePasswordModal

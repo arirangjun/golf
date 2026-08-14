@@ -6,6 +6,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { LoginForm } from "@/components/LoginForm";
 import { ReservationCalendar } from "@/components/ReservationCalendar";
+import { SuggestionBoard } from "@/components/SuggestionBoard";
 
 export function HomePage() {
   const { user, loading, logout } = useAuth();
@@ -69,8 +70,9 @@ export function HomePage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
         <ReservationCalendar />
+        <SuggestionBoard />
       </main>
 
       <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />

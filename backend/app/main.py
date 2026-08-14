@@ -10,8 +10,8 @@ from app.config import settings
 from app import database
 from app.database import Base, get_engine
 from app.exceptions import ApiError, api_error_handler
-from app.models import Reservation, User  # noqa: F401 — register metadata
-from app.routers import admin, auth, reservations, slots
+from app.models import Reservation, Suggestion, User  # noqa: F401 — register metadata
+from app.routers import admin, auth, reservations, slots, suggestions
 from app.services.reservation_service import delete_expired_reservations
 from app.services.seed_service import seed_default_accounts
 
@@ -160,6 +160,7 @@ def setup_status():
 app.include_router(auth.router, prefix="/api")
 app.include_router(reservations.router, prefix="/api")
 app.include_router(slots.router, prefix="/api")
+app.include_router(suggestions.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(setup_router, prefix="/api")
 

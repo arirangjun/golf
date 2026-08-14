@@ -33,6 +33,7 @@ class User(Base):
     )
 
     reservations: Mapped[list["Reservation"]] = relationship(back_populates="user")
+    suggestions: Mapped[list["Suggestion"]] = relationship(back_populates="user")
 
     __table_args__ = (Index("User_dong_ho_idx", "dong", "ho"),)
 
@@ -58,3 +59,16 @@ class Reservation(Base):
         Index("Reservation_date_idx", "date"),
         Index("Reservation_date_startHour_key", "date", "startHour", unique=True),
     )
+
+
+class Suggestion(Base):
+    __tablename__ = "Suggestion"
+
+    id: Mapped[str] = mapped_column(String(191), primary_key=True, default=lambda: generate_id())
+    userId: Mapped[str] = mapped_column(String(191), ForeignKey("User.id", ondelete="CASCADE"))
+    content: Mapped[str] = mapped_column(String(1000))
+    createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="suggestions")
+
+    __table_args__ = (Index("Suggestion_createdAt_idx", "createdAt"),)
