@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.exceptions import ApiError
 from app.models import Role, Suggestion, User
-from app.services.formatting import format_unit
+from app.services.formatting import format_member_display
 
 
 def list_suggestions(db: Session, limit: int = 100) -> list[Suggestion]:
@@ -50,8 +50,7 @@ def suggestion_to_dict(item: Suggestion, current_user_id: str, is_admin: bool) -
         "id": item.id,
         "content": item.content,
         "createdAt": item.createdAt.isoformat() if item.createdAt else "",
-        "authorName": user.name if user else "",
-        "unitLabel": format_unit(user.dong, user.ho) if user else "",
+        "authorDisplay": format_member_display(user.dong, user.name) if user else "",
         "isMine": item.userId == current_user_id,
         "canDelete": is_admin or item.userId == current_user_id,
     }

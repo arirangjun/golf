@@ -6,8 +6,7 @@ interface SuggestionItem {
   id: string;
   content: string;
   createdAt: string;
-  authorName: string;
-  unitLabel: string;
+  authorDisplay: string;
   isMine: boolean;
   canDelete: boolean;
 }
@@ -128,7 +127,7 @@ export function SuggestionBoard() {
                 <div className="min-w-0">
                   <p className="whitespace-pre-wrap text-sm text-gray-900">{item.content}</p>
                   <p className="mt-1 text-xs text-gray-500">
-                    {item.unitLabel} {item.authorName}
+                    {item.authorDisplay}
                     {item.isMine ? " · 내 글" : ""}
                     {item.createdAt ? ` · ${formatWhen(item.createdAt)}` : ""}
                   </p>
