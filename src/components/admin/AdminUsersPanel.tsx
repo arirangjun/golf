@@ -120,6 +120,27 @@ export function AdminUsersPanel() {
     setCreating(false);
   };
 
+  const handleDelete = async (user: AdminUser) => {
+    const label = `${user.unitLabel} ${user.name}`;
+    if (
+      !confirm(
+        `${label} 회원을 삭제하시겠습니까?\n예약·건의 기록도 함께 삭제되며 되돌릴 수 없습니다.`
+      )
+    ) {
+      return;
+    }
+
+    const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+    const data = await res.json();
+
+    if (res.ok) {
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      setMessage({ type: "success", text: `${label} 회원이 삭제되었습니다.` });
+    } else {
+      setMessage({ type: "error", text: data.error?.message ?? "삭제 실패" });
+    }
+  };
+
   const updateUser = async (
     id: string,
     patch: {
@@ -360,6 +381,12 @@ export function AdminUsersPanel() {
                         className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
                       >
                         {user.isActive ? "비활성화" : "활성화"}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(user)}
+                        className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                      >
+                        삭제
                       </button>
                     </div>
                   </td>

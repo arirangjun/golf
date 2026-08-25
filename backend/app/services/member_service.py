@@ -21,6 +21,7 @@ __all__ = [
     "authenticate_member",
     "change_member_password",
     "create_member",
+    "delete_member",
     "import_members",
     "count_members_with_unit_password",
 ]
@@ -124,6 +125,17 @@ def _format_created(user: User, reservation_count: int = 0) -> CreatedMember:
         displayName=format_member_display(user.dong, user.name),
         reservationCount=reservation_count,
     )
+
+
+def delete_member(db: Session, user_id: str) -> None:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise ApiError("NOT_FOUND", "회원을 찾을 수 없습니다.", 404)
+    if user.role == Role.ADMIN:
+        raise ApiError("VALIDATION_ERROR", "관리자 계정은 삭제할 수 없습니다.")
+
+    db.delete(user)
+    db.commit()
 
 
 def create_member(db: Session, input_data: MemberInput) -> CreatedMember:

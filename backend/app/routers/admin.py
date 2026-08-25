@@ -24,7 +24,13 @@ from app.services.formatting import (
     hash_password,
     normalize_phone,
 )
-from app.services.member_service import MemberInput, count_members_with_unit_password, create_member, import_members
+from app.services.member_service import (
+    MemberInput,
+    count_members_with_unit_password,
+    create_member,
+    delete_member,
+    import_members,
+)
 from app.services.reservation_service import (
     cancel_reservation,
     count_user_reservations_within_retention,
@@ -164,6 +170,18 @@ def update_user(
             "isActive": current.isActive,
         }
     }
+
+
+@router.delete("/users/{user_id}")
+def remove_user(
+    user_id: str,
+    db: DbSession,
+    admin: SessionUser = Depends(admin_user),
+):
+    if user_id == admin.id:
+        raise ApiError("VALIDATION_ERROR", "본인 계정은 삭제할 수 없습니다.")
+    delete_member(db, user_id)
+    return {"ok": True}
 
 
 @router.post("/users/import")
