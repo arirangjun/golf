@@ -72,7 +72,12 @@ class AdminCreateReservationBody(BaseModel):
 
 @router.get("/users")
 def list_users(db: DbSession, _admin: SessionUser = Depends(admin_user)):
-    users = db.query(User).order_by(User.createdAt.desc()).all()
+    users = (
+        db.query(User)
+        .filter(User.deletedAt.is_(None))
+        .order_by(User.createdAt.desc())
+        .all()
+    )
     result = []
     for user in users:
         reservation_count = count_user_reservations_within_retention(db, user.id)
@@ -127,7 +132,7 @@ def update_user(
     if user_id == admin.id and body.isActive is False:
         raise ApiError("VALIDATION_ERROR", "본인 계정은 비활성화할 수 없습니다.")
 
-    current = db.query(User).filter(User.id == user_id).first()
+    current = db.query(User).filter(User.id == user_id, User.deletedAt.is_(None)).first()
     if not current:
         raise ApiError("NOT_FOUND", "회원을 찾을 수 없습니다.", 404)
 

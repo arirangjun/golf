@@ -22,12 +22,14 @@ model User {
   ho           String        @default("")
   role         Role          @default(USER)
   isActive     Boolean       @default(true)
+  deletedAt    DateTime?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   reservations Reservation[]
   suggestions  Suggestion[]
 
   @@index([dong, ho])
+  @@index([deletedAt])
 }
 
 model Reservation {

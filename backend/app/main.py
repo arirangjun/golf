@@ -21,12 +21,33 @@ RETENTION_CLEANUP_INTERVAL_SEC = 60 * 60 * 24  # 24h
 def init_database() -> dict:
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
+    _ensure_user_deleted_at_column(engine)
     assert database.SessionLocal is not None
     db = database.SessionLocal()
     try:
         return seed_default_accounts(db)
     finally:
         db.close()
+
+
+def _ensure_user_deleted_at_column(engine) -> None:
+    """create_all does not add columns to existing tables; ensure soft-delete field exists."""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("User")}
+        if "deletedAt" in columns:
+            return
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE `User` ADD COLUMN `deletedAt` DATETIME NULL"))
+            try:
+                conn.execute(text("CREATE INDEX `User_deletedAt_idx` ON `User`(`deletedAt`)"))
+            except Exception:  # noqa: BLE001
+                pass
+        print("Added User.deletedAt column for soft-delete")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: ensure User.deletedAt failed: {type(exc).__name__}: {exc!r}")
 
 
 def run_reservation_retention_cleanup() -> int:

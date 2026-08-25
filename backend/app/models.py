@@ -27,6 +27,7 @@ class User(Base):
     ho: Mapped[str] = mapped_column(String(191), default="")
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.USER)
     isActive: Mapped[bool] = mapped_column(Boolean, default=True)
+    deletedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True, default=None)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
     updatedAt: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now(), onupdate=func.now()

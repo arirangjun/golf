@@ -43,6 +43,8 @@ export function AdminUsersPanel() {
   );
   const [importing, setImporting] = useState(false);
   const [importErrors, setImportErrors] = useState<{ row: number; message: string }[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const downloadTemplate = () => {
     window.open("/api/admin/users/template", "_blank");
@@ -121,10 +123,18 @@ export function AdminUsersPanel() {
   };
 
   const handleDelete = async (user: AdminUser) => {
+    if (user.isActive) {
+      setMessage({
+        type: "error",
+        text: "활성 회원은 삭제할 수 없습니다. 먼저 비활성화한 후 삭제해 주세요.",
+      });
+      return;
+    }
+
     const label = `${user.unitLabel} ${user.name}`;
     if (
       !confirm(
-        `${label} 회원을 삭제하시겠습니까?\n예약·건의 기록도 함께 삭제되며 되돌릴 수 없습니다.`
+        `${label} 회원을 삭제하시겠습니까?\n예약 내역은 그대로 유지됩니다.`
       )
     ) {
       return;
@@ -201,6 +211,24 @@ export function AdminUsersPanel() {
 
   const members = users.filter((u) => u.role === "USER");
   const admins = users.filter((u) => u.role === "ADMIN");
+
+  const normalizedQuery = searchQuery.trim().toLowerCase().replace(/\s+/g, "");
+  const filteredMembers = normalizedQuery
+    ? members.filter((u) => {
+        const haystack = [
+          u.dong,
+          u.ho,
+          u.unitLabel,
+          u.name,
+          u.displayName,
+          u.phone,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .replace(/\s+/g, "");
+        return haystack.includes(normalizedQuery);
+      })
+    : members;
 
   if (loading) return <p className="text-gray-500">로딩 중...</p>;
 
@@ -325,9 +353,54 @@ export function AdminUsersPanel() {
 
       <div className="overflow-x-auto rounded-xl bg-white shadow-sm">
         <div className="border-b px-4 py-3">
-          <h3 className="font-semibold text-gray-900">등록 회원 목록</h3>
-          <p className="text-xs text-gray-500">
-            활성 {members.filter((m) => m.isActive).length}명 / 전체 {members.length}명
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold text-gray-900">등록 회원 목록</h3>
+            <button
+              type="button"
+              aria-label="회원 검색"
+              aria-expanded={searchOpen}
+              onClick={() => {
+                setSearchOpen((open) => {
+                  if (open) setSearchQuery("");
+                  return !open;
+                });
+              }}
+              className={`rounded-lg border p-1.5 transition-colors ${
+                searchOpen
+                  ? "border-primary-300 bg-primary-50 text-primary-700"
+                  : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            </button>
+            {searchOpen && (
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="동, 호수, 이름, 휴대폰 검색"
+                autoFocus
+                className="min-w-[12rem] flex-1 rounded-lg border px-3 py-1.5 text-sm sm:max-w-xs"
+              />
+            )}
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {normalizedQuery
+              ? `검색 결과 ${filteredMembers.length}명 / 전체 ${members.length}명`
+              : `활성 ${members.filter((m) => m.isActive).length}명 / 전체 ${members.length}명`}
           </p>
         </div>
         <table className="w-full text-left text-sm">
@@ -348,8 +421,14 @@ export function AdminUsersPanel() {
                   등록된 회원이 없습니다. 위에서 회원을 등록해 주세요.
                 </td>
               </tr>
+            ) : filteredMembers.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  검색 결과가 없습니다.
+                </td>
+              </tr>
             ) : (
-              members.map((user) => (
+              filteredMembers.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium">{user.unitLabel}</td>
                   <td className="px-4 py-3">{user.displayName.replace(/^[^\s]+\s/, "")}</td>
@@ -382,12 +461,14 @@ export function AdminUsersPanel() {
                       >
                         {user.isActive ? "비활성화" : "활성화"}
                       </button>
-                      <button
-                        onClick={() => handleDelete(user)}
-                        className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                      >
-                        삭제
-                      </button>
+                      {!user.isActive && (
+                        <button
+                          onClick={() => handleDelete(user)}
+                          className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                        >
+                          삭제
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

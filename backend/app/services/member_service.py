@@ -77,7 +77,12 @@ def _to_stored_phone(phone: str | None) -> str:
 def count_members_with_unit_password(
     db: Session, dong: str, ho: str, plain_password: str, exclude_user_id: str | None = None
 ) -> int:
-    query = db.query(User).filter(User.dong == dong, User.ho == ho, User.role == Role.USER)
+    query = db.query(User).filter(
+        User.dong == dong,
+        User.ho == ho,
+        User.role == Role.USER,
+        User.deletedAt.is_(None),
+    )
     if exclude_user_id:
         query = query.filter(User.id != exclude_user_id)
     users = query.all()
@@ -87,7 +92,9 @@ def count_members_with_unit_password(
 def change_member_password(
     db: Session, user_id: str, current_password: str, new_password: str
 ) -> None:
-    user = db.query(User).filter(User.id == user_id, User.role == Role.USER).first()
+    user = db.query(User).filter(
+        User.id == user_id, User.role == Role.USER, User.deletedAt.is_(None)
+    ).first()
     if not user or not user.isActive:
         raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
 
@@ -128,13 +135,24 @@ def _format_created(user: User, reservation_count: int = 0) -> CreatedMember:
 
 
 def delete_member(db: Session, user_id: str) -> None:
-    user = db.query(User).filter(User.id == user_id).first()
+    """Soft-delete a member. Reservations remain linked for history display."""
+    from app.services.booking_rules import now_kst
+
+    user = db.query(User).filter(User.id == user_id, User.deletedAt.is_(None)).first()
     if not user:
         raise ApiError("NOT_FOUND", "회원을 찾을 수 없습니다.", 404)
     if user.role == Role.ADMIN:
         raise ApiError("VALIDATION_ERROR", "관리자 계정은 삭제할 수 없습니다.")
+    if user.isActive:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "활성 회원은 삭제할 수 없습니다. 먼저 비활성화한 후 삭제해 주세요.",
+        )
 
-    db.delete(user)
+    user.isActive = False
+    user.deletedAt = now_kst().replace(tzinfo=None)
+    # Free the login email so the same unit can be re-registered later.
+    user.email = f"deleted-{user.id}@deleted.local"
     db.commit()
 
 

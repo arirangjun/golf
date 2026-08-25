@@ -161,7 +161,7 @@ def create_reservation(
         )
 
     user = db.query(User).filter(User.id == user_id).first()
-    if not user or not user.isActive:
+    if not user or not user.isActive or user.deletedAt is not None:
         raise ApiError("USER_INACTIVE", "비활성화된 계정입니다.", 403)
 
     # 회원: 주간 1회 + 당일 빈 슬롯 추가 1회 + 21:00 이후 내일 추가 1회
