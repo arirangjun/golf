@@ -345,6 +345,13 @@ def delete_expired_reservations(db: Session) -> int:
     return int(deleted or 0)
 
 
+def reset_all_reservations(db: Session) -> int:
+    """모든 예약을 삭제(초기화). 삭제 건수 반환."""
+    deleted = db.query(Reservation).delete(synchronize_session=False)
+    db.commit()
+    return int(deleted or 0)
+
+
 def get_monthly_member_stats(db: Session, year: int, month: int) -> dict:
     month_start = date(year, month, 1)
     if month == 12:

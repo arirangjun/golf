@@ -68,6 +68,9 @@ export function AdminReservationsPanel() {
   const [ho, setHo] = useState("");
   const [matches, setMatches] = useState<AdminUser[] | null>(null);
   const [booking, setBooking] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     const res = await fetch("/api/admin/users");
@@ -176,6 +179,49 @@ export function AdminReservationsPanel() {
     setMatches(null);
   };
 
+  const openResetModal = () => {
+    setResetPassword("");
+    setResetOpen(true);
+  };
+
+  const closeResetModal = () => {
+    if (resetting) return;
+    setResetOpen(false);
+    setResetPassword("");
+  };
+
+  const handleResetReservations = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPassword.trim()) {
+      setMessage({ type: "error", text: "관리자 비밀번호를 입력해 주세요." });
+      return;
+    }
+
+    setResetting(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/reservations/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: resetPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResetOpen(false);
+        setResetPassword("");
+        setMessage({
+          type: "success",
+          text: `예약이 초기화되었습니다. (${data.deleted ?? 0}건 삭제)`,
+        });
+        fetchWeek();
+      } else {
+        setMessage({ type: "error", text: data.error?.message ?? "초기화 실패" });
+      }
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const bookForUser = async (user: AdminUser, slot: PendingSlot) => {
     setBooking(true);
     try {
@@ -255,7 +301,14 @@ export function AdminReservationsPanel() {
       <div className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-gray-900">주간 예약 관리</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={openResetModal}
+              className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+            >
+              예약 초기화
+            </button>
             <button
               onClick={() =>
                 weekStart &&
@@ -514,6 +567,59 @@ export function AdminReservationsPanel() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {resetOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={closeResetModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-reservations-title"
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="reset-reservations-title" className="text-lg font-semibold text-gray-900">
+              예약 초기화
+            </h2>
+            <p className="mt-2 text-sm text-red-600">
+              모든 예약이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+            </p>
+            <form onSubmit={handleResetReservations} className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-sm text-gray-700">관리자 비밀번호</span>
+                <input
+                  type="password"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  autoFocus
+                  required
+                  placeholder="비밀번호 입력"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+                />
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={closeResetModal}
+                  disabled={resetting}
+                  className="rounded-lg border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetting}
+                  className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                >
+                  {resetting ? "초기화 중..." : "초기화"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

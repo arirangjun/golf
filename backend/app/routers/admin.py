@@ -23,6 +23,7 @@ from app.services.formatting import (
     format_unit,
     hash_password,
     normalize_phone,
+    verify_password,
 )
 from app.services.member_service import (
     MemberInput,
@@ -40,6 +41,7 @@ from app.services.reservation_service import (
     get_reservation_export_rows,
     get_reservation_stats,
     get_slots_for_week,
+    reset_all_reservations,
 )
 from app.services.excel_service import build_stats_export_buffer
 
@@ -68,6 +70,10 @@ class AdminCreateReservationBody(BaseModel):
     userId: str = Field(min_length=1)
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     startHour: int = Field(ge=0, le=23)
+
+
+class ResetReservationsBody(BaseModel):
+    password: str = Field(min_length=1)
 
 
 @router.get("/users")
@@ -285,6 +291,22 @@ def admin_delete_reservation(
 ):
     cancel_reservation(db, id, admin.id, is_admin=True)
     return {"ok": True}
+
+
+@router.post("/reservations/reset")
+def admin_reset_reservations(
+    body: ResetReservationsBody,
+    db: DbSession,
+    admin: SessionUser = Depends(admin_user),
+):
+    user = db.query(User).filter(User.id == admin.id, User.role == Role.ADMIN).first()
+    if not user or not user.isActive:
+        raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
+    if not verify_password(body.password, user.passwordHash):
+        raise ApiError("VALIDATION_ERROR", "관리자 비밀번호가 올바르지 않습니다.")
+
+    deleted = reset_all_reservations(db)
+    return {"ok": True, "deleted": deleted}
 
 
 @router.get("/slots/week")
