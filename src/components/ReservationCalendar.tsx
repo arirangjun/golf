@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { format, addWeeks, subWeeks, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
 import { formatDateKST, isPastSlotKST, nowKST } from "@/lib/kst";
+import { canCancelReservation, cancelBlockedReason, parseDateInput } from "@/lib/utils";
 import { StatusMessageModal } from "@/components/StatusMessageModal";
 
 interface Slot {
@@ -30,6 +31,7 @@ interface Reservation {
   isSameDayBooking: boolean;
   canCancel: boolean;
   timeLabel: string;
+  createdAt?: string | null;
 }
 
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
@@ -106,19 +108,39 @@ export function ReservationCalendar() {
 
     if (slot.isMine && slot.reservationId) {
       const reservation = myReservations.find((r) => r.id === slot.reservationId);
-      if (reservation?.canCancel) {
-        if (!confirm(`${date} ${formatHour(slot.startHour)} 예약을 취소하시겠습니까?`)) return;
-        const res = await fetch(`/api/reservations?id=${slot.reservationId}`, {
-          method: "DELETE",
+      const allowCancel =
+        reservation?.canCancel ||
+        (reservation
+          ? canCancelReservation(
+              parseDateInput(reservation.date),
+              reservation.startHour,
+              reservation.createdAt
+            )
+          : false);
+      if (!allowCancel) {
+        setMessage({
+          type: "error",
+          text: reservation
+            ? cancelBlockedReason(
+                parseDateInput(reservation.date),
+                reservation.startHour,
+                reservation.createdAt
+              )
+            : "지금은 취소할 수 없습니다.",
         });
-        const data = await res.json();
-        if (res.ok) {
-          setMessage({ type: "success", text: "예약이 취소되었습니다." });
-          fetchWeek();
-          fetchReservations();
-        } else {
-          setMessage({ type: "error", text: data.error?.message ?? "취소 실패" });
-        }
+        return;
+      }
+      if (!confirm(`${date} ${formatHour(slot.startHour)} 예약을 취소하시겠습니까?`)) return;
+      const res = await fetch(`/api/reservations?id=${slot.reservationId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage({ type: "success", text: "예약이 취소되었습니다." });
+        fetchWeek();
+        fetchReservations();
+      } else {
+        setMessage({ type: "error", text: data.error?.message ?? "취소 실패" });
       }
       return;
     }
@@ -250,7 +272,7 @@ export function ReservationCalendar() {
           <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 00:00~24:00 전 시간대 예약 가능</p>
           <p>• 당일 빈 슬롯: 주간 예약과 별도로 추가 1회 예약 가능</p>
           <p>• 21:00 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
-          <p>• 취소: 예약 후 10분 이내, 또는 예약 전날 21:00 이전 · 내 예약 셀 클릭으로 취소</p>
+          <p>• 취소: 예약 후 10분 이내(예약 시간·당일 여부 무관), 또는 예약 전날 21:00 이전 · 내 예약 셀 클릭으로 취소</p>
         </div>
 
         {loading ? (
@@ -352,10 +374,22 @@ export function ReservationCalendar() {
                         ? "당일 추가 예약"
                         : "익일 추가 예약"
                       : "기본 예약"}
-                    {!r.canCancel && " · 취소 불가 (예약 후 10분 초과 · 전날 21시 이후)"}
+                    {!(
+                      r.canCancel ||
+                      canCancelReservation(
+                        parseDateInput(r.date),
+                        r.startHour,
+                        r.createdAt
+                      )
+                    ) && " · 취소 불가"}
                   </p>
                 </div>
-                {r.canCancel && (
+                {(r.canCancel ||
+                  canCancelReservation(
+                    parseDateInput(r.date),
+                    r.startHour,
+                    r.createdAt
+                  )) && (
                   <button
                     onClick={() => handleCancel(r.id)}
                     className="rounded-lg border border-red-200 px-3 py-1 text-sm text-red-600 hover:bg-red-50"

@@ -227,6 +227,8 @@ def create_reservation(
             startHour=start_hour,
             endHour=start_hour + 1,
             isSameDayBooking=mark_as_bonus,
+            # MySQL NOW()가 UTC일 수 있어, 취소 유예 판정을 위해 KST wall clock로 저장
+            createdAt=now_kst().replace(tzinfo=None),
         )
         db.add(reservation)
         db.commit()

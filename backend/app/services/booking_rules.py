@@ -170,6 +170,35 @@ def get_reservation_datetime(reservation_date: date | datetime, start_hour: int)
     return datetime(d.year, d.month, d.day, start_hour, 0, 0, tzinfo=KST)
 
 
+def is_within_cancel_grace(
+    created_at: datetime | None, now: datetime | None = None
+) -> bool:
+    """예약 직후 CANCEL_GRACE_MINUTES 이내인지 (예약 슬롯 일시와 무관).
+
+    DB naive datetime이 KST 또는 UTC로 저장된 경우 모두 허용한다.
+    """
+    if created_at is None:
+        return False
+
+    current = now or now_kst()
+    grace = CANCEL_GRACE_MINUTES * 60
+    # 서버/클라이언트 시계 오차 여유
+    skew = 120
+
+    candidates: list[datetime] = []
+    if created_at.tzinfo is None:
+        candidates.append(created_at.replace(tzinfo=KST))
+        candidates.append(created_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(KST))
+    else:
+        candidates.append(created_at.astimezone(KST))
+
+    for created in candidates:
+        elapsed = (current - created).total_seconds()
+        if -skew <= elapsed <= grace:
+            return True
+    return False
+
+
 def can_cancel_reservation(
     reservation_date: date | datetime,
     start_hour: int,
@@ -178,16 +207,16 @@ def can_cancel_reservation(
 ) -> bool:
     """회원 취소 가능 여부.
 
-    - 예약 직후 CANCEL_GRACE_MINUTES 이내, 또는
+    - 예약 직후 CANCEL_GRACE_MINUTES 이내(슬롯 날짜·시간과 무관), 또는
     - 예약 전날 CANCEL_DEADLINE_HOUR_DAY_BEFORE 시 이전
     """
     current = now or now_kst()
 
-    if created_at is not None:
-        created = ensure_kst(created_at)
-        if (current - created).total_seconds() <= CANCEL_GRACE_MINUTES * 60:
-            return True
+    # 1) 예약 직후 유예: 당일/과거/미래 슬롯 모두 무조건 허용
+    if is_within_cancel_grace(created_at, current):
+        return True
 
+    # 2) 예약 전날 21:00 이전
     res_date = to_date_only(reservation_date)
     day_before = res_date - timedelta(days=1)
     deadline = datetime(
@@ -213,7 +242,7 @@ def cancel_blocked_reason(
         return ""
     return (
         f"취소할 수 없습니다. "
-        f"예약 후 {CANCEL_GRACE_MINUTES}분 이내, 또는 예약 전날 "
+        f"예약 후 {CANCEL_GRACE_MINUTES}분 이내(시간 무관), 또는 예약 전날 "
         f"{CANCEL_DEADLINE_HOUR_DAY_BEFORE}:00 이전까지 취소할 수 있습니다."
     )
 

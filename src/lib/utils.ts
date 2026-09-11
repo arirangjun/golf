@@ -196,12 +196,30 @@ export function canCancelReservation(
   createdAt?: Date | string | null,
   now: Date = nowKST()
 ): boolean {
+  // 1) 예약 직후 10분: 슬롯 날짜·시간과 무관
   if (createdAt) {
-    const created = typeof createdAt === "string" ? new Date(createdAt) : createdAt;
-    const elapsedMs = now.getTime() - created.getTime();
-    if (elapsedMs <= CANCEL_GRACE_MINUTES * 60 * 1000) return true;
+    const graceMs = CANCEL_GRACE_MINUTES * 60 * 1000;
+    const skewMs = 120 * 1000;
+    const candidates: Date[] = [];
+    if (createdAt instanceof Date) {
+      candidates.push(createdAt);
+    } else {
+      const raw = createdAt.trim();
+      if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+        candidates.push(new Date(raw));
+      } else {
+        candidates.push(new Date(`${raw}+09:00`));
+        candidates.push(new Date(`${raw}Z`));
+      }
+    }
+    for (const created of candidates) {
+      if (Number.isNaN(created.getTime())) continue;
+      const elapsed = now.getTime() - created.getTime();
+      if (elapsed >= -skewMs && elapsed <= graceMs) return true;
+    }
   }
 
+  // 2) 예약 전날 21:00 이전
   const resDay = toDateOnly(reservationDate);
   const dayBefore = addDays(resDay, -1);
   const deadline = new Date(dayBefore);
@@ -218,7 +236,7 @@ export function cancelBlockedReason(
   if (canCancelReservation(reservationDate, startHour, createdAt, now)) {
     return "";
   }
-  return `취소할 수 없습니다. 예약 후 ${CANCEL_GRACE_MINUTES}분 이내, 또는 예약 전날 ${String(CANCEL_DEADLINE_HOUR_DAY_BEFORE).padStart(2, "0")}:00 이전까지 취소할 수 있습니다.`;
+  return `취소할 수 없습니다. 예약 후 ${CANCEL_GRACE_MINUTES}분 이내(시간 무관), 또는 예약 전날 ${String(CANCEL_DEADLINE_HOUR_DAY_BEFORE).padStart(2, "0")}:00 이전까지 취소할 수 있습니다.`;
 }
 
 export function isNextDayBonusBookingAllowed(
