@@ -253,7 +253,7 @@ def cancel_reservation(
     if not is_admin and reservation.userId != user_id:
         raise ApiError("FORBIDDEN", "본인 예약만 취소할 수 있습니다.", 403)
 
-    # 관리자: 언제든 취소 / 회원: 예약 후 10분 이내만 (당일은 그 이후 불가)
+    # 관리자: 언제든 취소 / 회원: 예약 후 10분 이내 또는 예약 전날 21시 이전
     if not is_admin and not can_cancel_reservation(
         reservation.date, reservation.startHour, reservation.createdAt
     ):

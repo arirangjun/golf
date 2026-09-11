@@ -6,8 +6,9 @@ KST = ZoneInfo("Asia/Seoul")
 OPERATING_START_HOUR = 0
 OPERATING_END_HOUR = 24
 NEXT_DAY_BONUS_START_HOUR = 21
-CANCELLATION_HOURS_BEFORE = 3  # legacy reference; member cancel uses grace window
+CANCELLATION_HOURS_BEFORE = 3  # legacy reference; member cancel uses grace + day-before deadline
 CANCEL_GRACE_MINUTES = 10
+CANCEL_DEADLINE_HOUR_DAY_BEFORE = 21  # 예약 전날 이 시각 이전까지 취소 가능
 BOOKING_OPEN_HOUR = 14
 DEFAULT_MEMBER_PASSWORD = "1"
 RESERVATION_RETENTION_DAYS = 365
@@ -175,17 +176,30 @@ def can_cancel_reservation(
     created_at: datetime | None = None,
     now: datetime | None = None,
 ) -> bool:
-    """회원 취소: 예약 직후 CANCEL_GRACE_MINUTES 이내만 가능.
+    """회원 취소 가능 여부.
 
-    당일 예약도 이 유예 시간이 지나면 취소 불가.
+    - 예약 직후 CANCEL_GRACE_MINUTES 이내, 또는
+    - 예약 전날 CANCEL_DEADLINE_HOUR_DAY_BEFORE 시 이전
     """
     current = now or now_kst()
-    if created_at is None:
-        return False
 
-    created = ensure_kst(created_at)
-    elapsed_sec = (current - created).total_seconds()
-    return elapsed_sec <= CANCEL_GRACE_MINUTES * 60
+    if created_at is not None:
+        created = ensure_kst(created_at)
+        if (current - created).total_seconds() <= CANCEL_GRACE_MINUTES * 60:
+            return True
+
+    res_date = to_date_only(reservation_date)
+    day_before = res_date - timedelta(days=1)
+    deadline = datetime(
+        day_before.year,
+        day_before.month,
+        day_before.day,
+        CANCEL_DEADLINE_HOUR_DAY_BEFORE,
+        0,
+        0,
+        tzinfo=KST,
+    )
+    return current < deadline
 
 
 def cancel_blocked_reason(
@@ -195,17 +209,13 @@ def cancel_blocked_reason(
     now: datetime | None = None,
 ) -> str:
     """취소 불가 시 사용자 안내 문구."""
-    current = now or now_kst()
-    if created_at is not None:
-        created = ensure_kst(created_at)
-        if (current - created).total_seconds() <= CANCEL_GRACE_MINUTES * 60:
-            return ""
-    if to_date_only(reservation_date) == current.date():
-        return (
-            f"당일 예약은 취소할 수 없습니다. "
-            f"(예약 후 {CANCEL_GRACE_MINUTES}분 이내만 취소 가능)"
-        )
-    return f"예약 후 {CANCEL_GRACE_MINUTES}분 이내에만 취소할 수 있습니다."
+    if can_cancel_reservation(reservation_date, start_hour, created_at, now):
+        return ""
+    return (
+        f"취소할 수 없습니다. "
+        f"예약 후 {CANCEL_GRACE_MINUTES}분 이내, 또는 예약 전날 "
+        f"{CANCEL_DEADLINE_HOUR_DAY_BEFORE}:00 이전까지 취소할 수 있습니다."
+    )
 
 
 def is_next_day_bonus_booking_allowed(

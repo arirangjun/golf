@@ -23,8 +23,9 @@ export const OPERATING_END_HOUR = 24;
 /** After 21:00, one bonus booking for the next day is allowed */
 export const NEXT_DAY_BONUS_START_HOUR = 21;
 export const CANCELLATION_HOURS_BEFORE = 3;
-/** Member cancel allowed only within this many minutes after booking */
+/** Member cancel: within grace minutes after booking, or before 21:00 day before */
 export const CANCEL_GRACE_MINUTES = 10;
+export const CANCEL_DEADLINE_HOUR_DAY_BEFORE = 21;
 /** Weekend open hour: Saturday 14:00 (weekdays allow this+next week anytime) */
 export const BOOKING_OPEN_HOUR = 14;
 
@@ -195,10 +196,17 @@ export function canCancelReservation(
   createdAt?: Date | string | null,
   now: Date = nowKST()
 ): boolean {
-  if (!createdAt) return false;
-  const created = typeof createdAt === "string" ? new Date(createdAt) : createdAt;
-  const elapsedMs = now.getTime() - created.getTime();
-  return elapsedMs <= CANCEL_GRACE_MINUTES * 60 * 1000;
+  if (createdAt) {
+    const created = typeof createdAt === "string" ? new Date(createdAt) : createdAt;
+    const elapsedMs = now.getTime() - created.getTime();
+    if (elapsedMs <= CANCEL_GRACE_MINUTES * 60 * 1000) return true;
+  }
+
+  const resDay = toDateOnly(reservationDate);
+  const dayBefore = addDays(resDay, -1);
+  const deadline = new Date(dayBefore);
+  deadline.setHours(CANCEL_DEADLINE_HOUR_DAY_BEFORE, 0, 0, 0);
+  return now.getTime() < deadline.getTime();
 }
 
 export function cancelBlockedReason(
@@ -210,10 +218,7 @@ export function cancelBlockedReason(
   if (canCancelReservation(reservationDate, startHour, createdAt, now)) {
     return "";
   }
-  if (isSameDay(toDateOnly(reservationDate), toDateOnly(now))) {
-    return `당일 예약은 취소할 수 없습니다. (예약 후 ${CANCEL_GRACE_MINUTES}분 이내만 취소 가능)`;
-  }
-  return `예약 후 ${CANCEL_GRACE_MINUTES}분 이내에만 취소할 수 있습니다.`;
+  return `취소할 수 없습니다. 예약 후 ${CANCEL_GRACE_MINUTES}분 이내, 또는 예약 전날 ${String(CANCEL_DEADLINE_HOUR_DAY_BEFORE).padStart(2, "0")}:00 이전까지 취소할 수 있습니다.`;
 }
 
 export function isNextDayBonusBookingAllowed(
