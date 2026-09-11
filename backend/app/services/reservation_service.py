@@ -12,6 +12,7 @@ from app.services.booking_rules import (
     OPERATING_START_HOUR,
     can_book_date,
     can_cancel_reservation,
+    cancel_blocked_reason,
     date_to_datetime,
     format_date,
     format_hour,
@@ -252,9 +253,16 @@ def cancel_reservation(
     if not is_admin and reservation.userId != user_id:
         raise ApiError("FORBIDDEN", "본인 예약만 취소할 수 있습니다.", 403)
 
-    # 관리자: 언제든 취소 / 회원: 3시간 전까지만
-    if not is_admin and not can_cancel_reservation(reservation.date, reservation.startHour):
-        raise ApiError("CANCEL_TOO_LATE", "예약 3시간 전까지만 취소할 수 있습니다.")
+    # 관리자: 언제든 취소 / 회원: 예약 후 10분 이내만 (당일은 그 이후 불가)
+    if not is_admin and not can_cancel_reservation(
+        reservation.date, reservation.startHour, reservation.createdAt
+    ):
+        raise ApiError(
+            "CANCEL_TOO_LATE",
+            cancel_blocked_reason(
+                reservation.date, reservation.startHour, reservation.createdAt
+            ),
+        )
 
     db.delete(reservation)
     db.commit()
@@ -267,6 +275,39 @@ def get_user_reservations(db: Session, user_id: str) -> list[Reservation]:
         .filter(
             Reservation.userId == user_id,
             func.date(Reservation.date) >= cutoff,
+        )
+        .order_by(Reservation.date.asc(), Reservation.startHour.asc())
+        .all()
+    )
+
+
+def get_user_upcoming_reservations(db: Session, user_id: str) -> list[Reservation]:
+    """오늘 이후(포함) 해당 회원의 예약 목록."""
+    from app.services.booking_rules import today_kst
+
+    today = today_kst()
+    return (
+        db.query(Reservation)
+        .filter(
+            Reservation.userId == user_id,
+            func.date(Reservation.date) >= today,
+        )
+        .order_by(Reservation.date.asc(), Reservation.startHour.asc())
+        .all()
+    )
+
+
+def get_user_reservations_in_week(
+    db: Session, user_id: str, week_of: date
+) -> list[Reservation]:
+    """해당 주간(월~일)에 있는 회원의 모든 예약."""
+    week_start, week_end = get_week_range(week_of)
+    return (
+        db.query(Reservation)
+        .filter(
+            Reservation.userId == user_id,
+            func.date(Reservation.date) >= week_start,
+            func.date(Reservation.date) <= week_end,
         )
         .order_by(Reservation.date.asc(), Reservation.startHour.asc())
         .all()

@@ -41,6 +41,8 @@ from app.services.reservation_service import (
     get_reservation_export_rows,
     get_reservation_stats,
     get_slots_for_week,
+    get_user_reservations_in_week,
+    get_user_upcoming_reservations,
     reset_all_reservations,
 )
 from app.services.excel_service import build_stats_export_buffer
@@ -193,6 +195,41 @@ def remove_user(
         raise ApiError("VALIDATION_ERROR", "본인 계정은 삭제할 수 없습니다.")
     delete_member(db, user_id)
     return {"ok": True}
+
+
+@router.get("/users/{user_id}/reservations")
+def admin_user_reservations(
+    user_id: str,
+    db: DbSession,
+    weekOf: str | None = Query(None),
+    _admin: SessionUser = Depends(admin_user),
+):
+    user = db.query(User).filter(User.id == user_id, User.deletedAt.is_(None)).first()
+    if not user:
+        raise ApiError("NOT_FOUND", "회원을 찾을 수 없습니다.", 404)
+
+    if weekOf:
+        week_of = parse_date_input(weekOf)
+        week_start, week_end = get_week_range(week_of)
+        reservations = get_user_reservations_in_week(db, user_id, week_of)
+    else:
+        week_start, week_end = None, None
+        reservations = get_user_upcoming_reservations(db, user_id)
+
+    return {
+        "weekStart": format_date(week_start) if week_start else None,
+        "weekEnd": format_date(week_end) if week_end else None,
+        "reservations": [
+            {
+                "id": r.id,
+                "date": format_date(r.date),
+                "startHour": r.startHour,
+                "endHour": r.endHour,
+                "timeLabel": f"{format_hour(r.startHour)} - {format_hour(r.endHour)}",
+            }
+            for r in reservations
+        ]
+    }
 
 
 @router.post("/users/import")

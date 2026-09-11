@@ -225,6 +225,30 @@ export function AdminReservationsPanel() {
   const bookForUser = async (user: AdminUser, slot: PendingSlot) => {
     setBooking(true);
     try {
+      const existingRes = await fetch(
+        `/api/admin/users/${user.id}/reservations?weekOf=${encodeURIComponent(slot.date)}`
+      );
+      const existingData = await existingRes.json();
+      if (existingRes.ok) {
+        const existing: { date: string; startHour: number; timeLabel: string }[] =
+          existingData.reservations ?? [];
+        if (existing.length > 0) {
+          const weekLabel =
+            existingData.weekStart && existingData.weekEnd
+              ? `${existingData.weekStart} ~ ${existingData.weekEnd}`
+              : "해당 주간";
+          const lines = existing
+            .map((r) => `· ${r.date} ${formatHour(r.startHour)}`)
+            .join("\n");
+          const ok = confirm(
+            `${user.unitLabel} ${user.name}님은 해당 주간(${weekLabel})에 이미 예약이 있습니다.\n\n${lines}\n\n그래도 예약하시겠습니까?`
+          );
+          if (!ok) {
+            return;
+          }
+        }
+      }
+
       const res = await fetch("/api/admin/reservations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -353,6 +377,7 @@ export function AdminReservationsPanel() {
         <div className="mb-3 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-900">
           <p>• 관리자는 예약 오픈 시간·주간 제한 없이 예약/취소 가능</p>
           <p>• 빈 슬롯을 클릭한 뒤 동·호수를 입력하세요. 동일 세대가 여러 명이면 목록에서 선택합니다.</p>
+          <p>• 이미 예약이 있는 회원에게 추가 예약 시 해당 주간 예약 일시를 모두 확인한 뒤 진행합니다.</p>
         </div>
 
         {loading ? (

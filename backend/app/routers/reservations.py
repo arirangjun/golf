@@ -29,8 +29,9 @@ def list_reservations(db: DbSession, session: SessionUser = Depends(member_user)
                 "startHour": r.startHour,
                 "endHour": r.endHour,
                 "isSameDayBooking": r.isSameDayBooking,
-                "canCancel": can_cancel_reservation(r.date, r.startHour),
+                "canCancel": can_cancel_reservation(r.date, r.startHour, r.createdAt),
                 "timeLabel": f"{format_hour(r.startHour)} - {format_hour(r.endHour)}",
+                "createdAt": r.createdAt.isoformat() if r.createdAt else None,
             }
             for r in reservations
         ]

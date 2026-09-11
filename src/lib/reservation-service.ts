@@ -4,6 +4,7 @@ import { addDays } from "date-fns";
 import {
   ApiError,
   canCancelReservation,
+  cancelBlockedReason,
   formatDate,
   formatHour,
   formatMemberDisplay,
@@ -269,11 +270,11 @@ export async function cancelReservation(
 
   if (
     !isAdmin &&
-    !canCancelReservation(reservation.date, reservation.startHour)
+    !canCancelReservation(reservation.date, reservation.startHour, reservation.createdAt)
   ) {
     throw new ApiError(
       "CANCEL_TOO_LATE",
-      "예약 3시간 전까지만 취소할 수 있습니다."
+      cancelBlockedReason(reservation.date, reservation.startHour, reservation.createdAt)
     );
   }
 
