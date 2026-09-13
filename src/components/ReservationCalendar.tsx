@@ -6,6 +6,7 @@ import { ko } from "date-fns/locale";
 import { formatDateKST, isPastSlotKST, nowKST } from "@/lib/kst";
 import {
   CANCEL_DEADLINE_HOUR_DAY_BEFORE,
+  MAX_GROUP_SIZE,
   NEXT_DAY_BONUS_START_HOUR,
   canCancelReservation,
   cancelBlockedReason,
@@ -40,6 +41,15 @@ interface Reservation {
   canCancel: boolean;
   timeLabel: string;
   createdAt?: string | null;
+  groupId?: string | null;
+  isGroup?: boolean;
+}
+
+interface Friend {
+  id: string;
+  friendUserId: string;
+  name: string;
+  unitLabel: string;
 }
 
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
@@ -62,6 +72,9 @@ export function ReservationCalendar() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
     null
   );
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [hoverRange, setHoverRange] = useState<{ date: string; startHour: number } | null>(null);
 
   const fetchWeek = useCallback(async () => {
     setLoading(true);
@@ -89,10 +102,33 @@ export function ReservationCalendar() {
     if (res.ok) setMyReservations(data.reservations);
   }, []);
 
+  const fetchFriends = useCallback(async () => {
+    const res = await fetch("/api/friends");
+    const data = await res.json();
+    if (res.ok) setFriends(data.friends ?? []);
+  }, []);
+
   useEffect(() => {
     fetchWeek();
     fetchReservations();
-  }, [fetchWeek, fetchReservations]);
+    fetchFriends();
+  }, [fetchWeek, fetchReservations, fetchFriends]);
+
+  useEffect(() => {
+    const onFriendsUpdated = () => {
+      fetchFriends();
+    };
+    window.addEventListener("friends-updated", onFriendsUpdated);
+    return () => window.removeEventListener("friends-updated", onFriendsUpdated);
+  }, [fetchFriends]);
+
+  useEffect(() => {
+    const valid = new Set(friends.map((friend) => friend.friendUserId));
+    setSelectedFriendIds((prev) => prev.filter((id) => valid.has(id)));
+  }, [friends]);
+
+  const groupSize = 1 + selectedFriendIds.length;
+  const groupMode = groupSize > 1;
 
   const slotMap = useMemo(() => {
     const map = new Map<string, Slot>();
@@ -110,6 +146,44 @@ export function ReservationCalendar() {
     const end = parseISO(weekDays[6].date);
     return `${format(start, "M월 d일", { locale: ko })} ~ ${format(end, "M월 d일", { locale: ko })}`;
   }, [weekDays]);
+
+  const isRangeBookable = (date: string, startHour: number, size: number) => {
+    for (let i = 0; i < size; i++) {
+      const hour = startHour + i;
+      const slot = slotMap.get(`${date}-${hour}`);
+      if (
+        !slot ||
+        slot.isCleaning ||
+        !slot.available ||
+        !slot.isOperating ||
+        isPastSlot(date, hour)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const isInHoverRange = (date: string, hour: number) => {
+    if (!hoverRange || hoverRange.date !== date) return false;
+    return hour >= hoverRange.startHour && hour < hoverRange.startHour + groupSize;
+  };
+
+  const toggleFriend = (friendUserId: string) => {
+    setSelectedFriendIds((prev) => {
+      if (prev.includes(friendUserId)) {
+        return prev.filter((id) => id !== friendUserId);
+      }
+      if (prev.length + 1 >= MAX_GROUP_SIZE) {
+        setMessage({
+          type: "error",
+          text: `단체 예약은 본인 포함 최대 ${MAX_GROUP_SIZE}명까지 가능합니다.`,
+        });
+        return prev;
+      }
+      return [...prev, friendUserId];
+    });
+  };
 
   const handleCellClick = async (date: string, slot: Slot) => {
     setMessage(null);
@@ -138,7 +212,10 @@ export function ReservationCalendar() {
         });
         return;
       }
-      if (!confirm(`${date} ${formatHour(slot.startHour)} 예약을 취소하시겠습니까?`)) return;
+      const cancelText = reservation?.isGroup
+        ? `${date} ${formatHour(slot.startHour)} 단체 예약 전체를 취소하시겠습니까?`
+        : `${date} ${formatHour(slot.startHour)} 예약을 취소하시겠습니까?`;
+      if (!confirm(cancelText)) return;
       const res = await fetch(`/api/reservations?id=${slot.reservationId}`, {
         method: "DELETE",
       });
@@ -153,16 +230,44 @@ export function ReservationCalendar() {
       return;
     }
 
-    if (slot.isCleaning || !slot.available || !slot.isOperating || isPastSlot(date, slot.startHour)) return;
+    if (slot.isCleaning) return;
+    if (!groupMode && (!slot.available || !slot.isOperating || isPastSlot(date, slot.startHour))) return;
+
+    if (!isRangeBookable(date, slot.startHour, groupSize)) {
+      setMessage({
+        type: "error",
+        text: `연속 ${groupSize}시간 예약이 가능한 빈 칸이 아닙니다.`,
+      });
+      return;
+    }
+
+    const endHour = slot.startHour + groupSize;
+    if (groupMode) {
+      const names = friends
+        .filter((friend) => selectedFriendIds.includes(friend.friendUserId))
+        .map((friend) => friend.name)
+        .join(", ");
+      const ok = confirm(
+        `${date} ${formatHour(slot.startHour)}-${formatHour(endHour)} · ${groupSize}명 단체 예약\n나 + ${names}\n\n예약할까요?`
+      );
+      if (!ok) return;
+    }
 
     const res = await fetch("/api/reservations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, startHour: slot.startHour }),
+      body: JSON.stringify({
+        date,
+        startHour: slot.startHour,
+        friendIds: selectedFriendIds,
+      }),
     });
     const data = await res.json();
     if (res.ok) {
-      setMessage({ type: "success", text: "예약이 완료되었습니다." });
+      setMessage({
+        type: "success",
+        text: groupMode ? "단체 예약이 완료되었습니다." : "예약이 완료되었습니다.",
+      });
       fetchWeek();
       fetchReservations();
     } else {
@@ -171,7 +276,15 @@ export function ReservationCalendar() {
   };
 
   const handleCancel = async (id: string) => {
-    if (!confirm("예약을 취소하시겠습니까?")) return;
+    const reservation = myReservations.find((item) => item.id === id);
+    if (
+      !confirm(
+        reservation?.isGroup
+          ? "단체 예약 전체를 취소하시겠습니까?"
+          : "예약을 취소하시겠습니까?"
+      )
+    )
+      return;
     setMessage(null);
     const res = await fetch(`/api/reservations?id=${id}`, { method: "DELETE" });
     const data = await res.json();
@@ -188,6 +301,12 @@ export function ReservationCalendar() {
     if (!slot) return "bg-gray-50";
     if (slot.isCleaning) {
       return "bg-amber-50 border-amber-200 cursor-not-allowed";
+    }
+    const hovering = isInHoverRange(date, slot.startHour);
+    if (hovering && !slot.isMine && !slot.reservationId) {
+      return isRangeBookable(date, hoverRange!.startHour, groupSize)
+        ? "bg-primary-200 border-primary-400 cursor-pointer"
+        : "bg-red-100 border-red-200 cursor-not-allowed";
     }
     const past = isPastSlot(date, slot.startHour);
     if (slot.isMine) {
@@ -263,6 +382,10 @@ export function ReservationCalendar() {
             <span className="inline-block h-3 w-3 rounded border bg-white" /> 예약 가능
           </span>
           <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded border bg-primary-200 border-primary-400" />{" "}
+            단체 선택
+          </span>
+          <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded border bg-primary-100 border-primary-400" />{" "}
             내 예약
           </span>
@@ -285,16 +408,59 @@ export function ReservationCalendar() {
         <div className="mb-3 rounded-lg bg-blue-50 px-4 py-3 text-xs text-blue-800">
           {bookingWindowMessage && <p className="mb-1 font-medium">• {bookingWindowMessage}</p>}
           <p>• 주중(월~금): 이번 주(월~일) 언제든 예약 가능 · 주말: 토요일 14:00에 다음 주 오픈</p>
-          <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 06:00~24:00 예약 가능 (09:00~10:00 청소시간 제외)</p>
+          <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 06:00~24:00 예약 가능 (주중 09:00~10:00 청소시간 제외, 토·일은 청소시간 없음)</p>
           <p>• 당일 빈 슬롯: 주간 예약과 별도로 추가 1회 예약 가능</p>
           <p>• {formatHour(NEXT_DAY_BONUS_START_HOUR)} 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
+          <p>• 단체 예약: 친구를 선택한 인원수만큼 연속 시간을 한 번에 예약 (본인 포함 최대 {MAX_GROUP_SIZE}명)</p>
           <p>• 취소: 예약 후 10분 이내(예약 시간·당일 여부 무관), 또는 예약 전날 {formatHour(CANCEL_DEADLINE_HOUR_DAY_BEFORE)} 이전 · 내 예약 셀 클릭으로 취소</p>
+        </div>
+
+        <div className="mb-3 rounded-lg border border-primary-100 bg-primary-50/60 px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium text-gray-900">단체 예약</p>
+            <p className="text-xs text-gray-600">
+              선택 인원 {groupSize}명 · 연속 {groupSize}시간
+              {groupMode ? " · 시간에 마우스를 올리면 같은 수만큼 칸이 함께 표시됩니다" : ""}
+            </p>
+          </div>
+          {friends.length === 0 ? (
+            <p className="text-xs text-gray-500">
+              위에서 친구를 추가하면 함께 예약할 수 있습니다.
+            </p>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {friends.map((friend) => {
+                const checked = selectedFriendIds.includes(friend.friendUserId);
+                return (
+                  <li key={friend.friendUserId}>
+                    <label className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+                      checked
+                        ? "border-primary-400 bg-white text-primary-800"
+                        : "border-gray-200 bg-white text-gray-700"
+                    }`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleFriend(friend.friendUserId)}
+                        className="accent-primary-600"
+                      />
+                      <span>{friend.name}</span>
+                      <span className="text-gray-400">{friend.unitLabel}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
 
         {loading ? (
           <p className="py-12 text-center text-gray-500">로딩 중...</p>
         ) : (
-          <div className="max-h-[600px] overflow-auto rounded-xl border border-gray-200">
+          <div
+            className="max-h-[600px] overflow-auto rounded-xl border border-gray-200"
+            onMouseLeave={() => setHoverRange(null)}
+          >
             <div className="min-w-[640px]">
               {/* Header: 요일 1행 — 세로 스크롤 시 고정 */}
               <div className="sticky top-0 z-20 grid grid-cols-[52px_repeat(7,1fr)] border-b bg-gray-50">
@@ -329,24 +495,35 @@ export function ReservationCalendar() {
                     const clickable =
                       !slot?.isCleaning &&
                       (slot?.isMine ||
-                        (slot?.available && !isPastSlot(day.date, hour)));
+                        (groupMode
+                          ? Boolean(slot)
+                          : Boolean(slot?.available && !isPastSlot(day.date, hour))));
 
                     return (
                       <button
                         key={`${day.date}-${hour}`}
                         type="button"
                         disabled={!clickable}
+                        onMouseEnter={() => {
+                          if (!slot || slot.isCleaning || slot.isMine || slot.reservationId) {
+                            setHoverRange(null);
+                            return;
+                          }
+                          setHoverRange({ date: day.date, startHour: hour });
+                        }}
                         onClick={() => slot && handleCellClick(day.date, slot)}
                         title={
                           slot?.isCleaning
                             ? "청소시간"
                             : slot?.isMine
                               ? "클릭하여 취소"
-                              : slot?.available
-                                ? "클릭하여 예약"
-                                : slot?.bookable === false
-                                  ? "예약 오픈 전"
-                                  : slot?.displayLabel ?? "예약 불가"
+                              : groupMode
+                                ? `${groupSize}시간 단체 예약`
+                                : slot?.available
+                                  ? "클릭하여 예약"
+                                  : slot?.bookable === false
+                                    ? "예약 오픈 전"
+                                    : slot?.displayLabel ?? "예약 불가"
                         }
                         className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
                       >
@@ -392,11 +569,13 @@ export function ReservationCalendar() {
                     {r.date} {r.timeLabel}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {r.isSameDayBooking
-                      ? r.date === formatDateKST(nowKST())
-                        ? "당일 추가 예약"
-                        : "익일 추가 예약"
-                      : "기본 예약"}
+                    {r.isGroup
+                      ? "단체 예약"
+                      : r.isSameDayBooking
+                        ? r.date === formatDateKST(nowKST())
+                          ? "당일 추가 예약"
+                          : "익일 추가 예약"
+                        : "기본 예약"}
                     {!(
                       r.canCancel ||
                       canCancelReservation(

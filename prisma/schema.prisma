@@ -27,6 +27,8 @@ model User {
   updatedAt    DateTime      @updatedAt
   reservations Reservation[]
   suggestions  Suggestion[]
+  friendships  Friendship[]  @relation("FriendOwner")
+  friendOf     Friendship[]  @relation("FriendTarget")
 
   @@index([dong, ho])
   @@index([deletedAt])
@@ -40,12 +42,27 @@ model Reservation {
   startHour        Int
   endHour          Int
   isSameDayBooking Boolean  @default(false)
+  groupId          String?
+  organizerId      String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@unique([date, startHour])
   @@index([userId, date])
   @@index([date])
+  @@index([groupId])
+}
+
+model Friendship {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  createdAt DateTime @default(now())
+  user      User     @relation("FriendOwner", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendTarget", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([userId])
 }
 
 model Suggestion {

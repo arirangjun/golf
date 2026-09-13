@@ -12,6 +12,7 @@ CANCELLATION_HOURS_BEFORE = 3  # legacy reference; member cancel uses grace + da
 CANCEL_GRACE_MINUTES = 10
 CANCEL_DEADLINE_HOUR_DAY_BEFORE = 22  # 예약 전날 이 시각 이전까지 취소 가능
 BOOKING_OPEN_HOUR = 14
+MAX_GROUP_SIZE = 6
 DEFAULT_MEMBER_PASSWORD = "1"
 RESERVATION_RETENTION_DAYS = 365
 
@@ -163,12 +164,20 @@ def get_all_day_hours() -> list[int]:
     return list(range(OPERATING_START_HOUR, OPERATING_END_HOUR))
 
 
-def is_cleaning_hour(hour: int) -> bool:
+def is_weekend(value: date | datetime | None) -> bool:
+    if value is None:
+        return False
+    return to_date_only(value).weekday() >= 5
+
+
+def is_cleaning_hour(hour: int, target: date | datetime | None = None) -> bool:
+    if is_weekend(target):
+        return False
     return CLEANING_START_HOUR <= hour < CLEANING_END_HOUR
 
 
-def is_operating_hour(hour: int) -> bool:
-    return OPERATING_START_HOUR <= hour < OPERATING_END_HOUR and not is_cleaning_hour(hour)
+def is_operating_hour(hour: int, target: date | datetime | None = None) -> bool:
+    return OPERATING_START_HOUR <= hour < OPERATING_END_HOUR and not is_cleaning_hour(hour, target)
 
 
 def get_reservation_datetime(reservation_date: date | datetime, start_hour: int) -> datetime:

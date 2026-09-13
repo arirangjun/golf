@@ -10,8 +10,8 @@ from app.config import settings
 from app import database
 from app.database import Base, get_engine
 from app.exceptions import ApiError, api_error_handler
-from app.models import Reservation, Suggestion, User  # noqa: F401 — register metadata
-from app.routers import admin, auth, reservations, slots, suggestions
+from app.models import Friendship, Reservation, Suggestion, User  # noqa: F401 — register metadata
+from app.routers import admin, auth, friends, reservations, slots, suggestions
 from app.services.reservation_service import delete_expired_reservations
 from app.services.seed_service import seed_default_accounts
 
@@ -22,6 +22,7 @@ def init_database() -> dict:
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
     _ensure_user_deleted_at_column(engine)
+    _ensure_reservation_group_columns(engine)
     assert database.SessionLocal is not None
     db = database.SessionLocal()
     try:
@@ -48,6 +49,32 @@ def _ensure_user_deleted_at_column(engine) -> None:
         print("Added User.deletedAt column for soft-delete")
     except Exception as exc:  # noqa: BLE001
         print(f"Warning: ensure User.deletedAt failed: {type(exc).__name__}: {exc!r}")
+
+
+def _ensure_reservation_group_columns(engine) -> None:
+    """create_all does not add columns to existing tables."""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("Reservation")}
+        statements: list[str] = []
+        if "groupId" not in columns:
+            statements.append("ALTER TABLE `Reservation` ADD COLUMN `groupId` VARCHAR(191) NULL")
+        if "organizerId" not in columns:
+            statements.append("ALTER TABLE `Reservation` ADD COLUMN `organizerId` VARCHAR(191) NULL")
+        if not statements:
+            return
+        with engine.begin() as conn:
+            for stmt in statements:
+                conn.execute(text(stmt))
+            try:
+                conn.execute(text("CREATE INDEX `Reservation_groupId_idx` ON `Reservation`(`groupId`)"))
+            except Exception:  # noqa: BLE001
+                pass
+        print("Added Reservation group columns")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: ensure Reservation group columns failed: {type(exc).__name__}: {exc!r}")
 
 
 def run_reservation_retention_cleanup() -> int:
@@ -182,6 +209,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(reservations.router, prefix="/api")
 app.include_router(slots.router, prefix="/api")
 app.include_router(suggestions.router, prefix="/api")
+app.include_router(friends.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(setup_router, prefix="/api")
 

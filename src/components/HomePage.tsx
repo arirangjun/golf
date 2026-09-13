@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { LoginForm } from "@/components/LoginForm";
+import { FriendsPanel } from "@/components/FriendsPanel";
 import { ReservationCalendar } from "@/components/ReservationCalendar";
 import { SuggestionBoard } from "@/components/SuggestionBoard";
 
@@ -71,6 +72,7 @@ export function HomePage() {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
+        <FriendsPanel />
         <ReservationCalendar />
         <SuggestionBoard />
       </main>

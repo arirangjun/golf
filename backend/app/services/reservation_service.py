@@ -6,10 +6,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.exceptions import ApiError
-from app.models import Reservation, User
+from app.models import Reservation, User, generate_id
+from app.services.friend_service import assert_are_friends
 from app.services.booking_rules import (
     CLEANING_END_HOUR,
     CLEANING_START_HOUR,
+    MAX_GROUP_SIZE,
     NEXT_DAY_BONUS_START_HOUR,
     OPERATING_END_HOUR,
     OPERATING_START_HOUR,
@@ -75,8 +77,8 @@ def get_slots_for_date(
     current = now_kst()
     for hour in get_all_day_hours():
         reservation = booked_map.get(hour)
-        cleaning = is_cleaning_hour(hour)
-        operating = is_operating_hour(hour)
+        cleaning = is_cleaning_hour(hour, date_only)
+        operating = is_operating_hour(hour, date_only)
         # 관리자: 과거 슬롯도 예약 가능 / 회원: 과거 불가, 오픈 주간만
         slot_available = operating and reservation is None and bookable
         if slot_available and not admin_view:
@@ -141,30 +143,21 @@ def count_weekly_reservations(db: Session, user_id: str, target: date) -> int:
     )
 
 
-def create_reservation(
-    db: Session,
-    user_id: str,
-    target: date,
-    start_hour: int,
-    is_admin: bool = False,
-) -> dict:
-    current = now_kst()
-    date_only = to_date_only(target)
+def _normalize_friend_ids(friend_ids: list[str] | None, organizer_id: str) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for friend_id in friend_ids or []:
+        if not friend_id or friend_id == organizer_id or friend_id in seen:
+            continue
+        seen.add(friend_id)
+        result.append(friend_id)
+    return result
 
-    if is_cleaning_hour(start_hour):
-        raise ApiError(
-            "VALIDATION_ERROR",
-            f"{format_hour(CLEANING_START_HOUR)} ~ {format_hour(CLEANING_END_HOUR)}는 청소시간으로 예약할 수 없습니다.",
-        )
 
-    if start_hour < OPERATING_START_HOUR or start_hour >= OPERATING_END_HOUR:
-        raise ApiError(
-            "VALIDATION_ERROR",
-            f"예약 가능 시간은 {format_hour(OPERATING_START_HOUR)} ~ {format_hour(OPERATING_END_HOUR)} 입니다.",
-        )
-
-    reservation_time = get_reservation_datetime(date_only, start_hour)
-    # 관리자: 과거 포함 모든 시간 예약 가능 / 회원: 미래만
+def _assert_date_and_time_bookable(
+    date_only: date, hour: int, current, is_admin: bool
+) -> None:
+    reservation_time = get_reservation_datetime(date_only, hour)
     if reservation_time <= current and not is_admin:
         raise ApiError("VALIDATION_ERROR", "과거 시간은 예약할 수 없습니다.")
 
@@ -182,24 +175,74 @@ def create_reservation(
             f"예약 오픈 전입니다. {format_date(next_open)} {format_hour(next_open.hour)}부터 예약 가능합니다.",
         )
 
+
+def _assert_hour_open(date_only: date, hour: int) -> None:
+    if is_cleaning_hour(hour, date_only):
+        raise ApiError(
+            "VALIDATION_ERROR",
+            f"{format_hour(CLEANING_START_HOUR)} ~ {format_hour(CLEANING_END_HOUR)}는 청소시간으로 예약할 수 없습니다.",
+        )
+    if hour < OPERATING_START_HOUR or hour >= OPERATING_END_HOUR:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            f"예약 가능 시간은 {format_hour(OPERATING_START_HOUR)} ~ {format_hour(OPERATING_END_HOUR)} 입니다.",
+        )
+
+
+def _resolve_mark_as_bonus(
+    db: Session,
+    user_id: str,
+    date_only: date,
+    current,
+    is_admin: bool,
+    display_name: str | None = None,
+) -> bool:
+    if is_admin:
+        return False
+    prefix = f"{display_name}님은 " if display_name else ""
+    weekly_used = count_weekly_reservations(db, user_id, date_only) >= 1
+    if is_next_day_bonus_booking_allowed(date_only, current):
+        return True
+    if is_same_day_extra_booking_allowed(date_only, current) and weekly_used:
+        return True
+    if weekly_used:
+        raise ApiError(
+            "WEEKLY_LIMIT",
+            f"{prefix}이번 주(월~일) 기본 예약은 1회만 가능합니다. "
+            f"당일 빈 슬롯은 추가 1회, {format_hour(NEXT_DAY_BONUS_START_HOUR)} 이후 내일 슬롯은 추가 1회 예약할 수 있습니다.",
+        )
+    return False
+
+
+def create_reservation(
+    db: Session,
+    user_id: str,
+    target: date,
+    start_hour: int,
+    is_admin: bool = False,
+    friend_ids: list[str] | None = None,
+) -> dict:
+    current = now_kst()
+    date_only = to_date_only(target)
+    companions = _normalize_friend_ids(friend_ids, user_id)
+    if companions:
+        return create_group_reservation(
+            db,
+            organizer_id=user_id,
+            target=date_only,
+            start_hour=start_hour,
+            friend_ids=companions,
+            current=current,
+        )
+
+    _assert_hour_open(date_only, start_hour)
+    _assert_date_and_time_bookable(date_only, start_hour, current, is_admin)
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.isActive or user.deletedAt is not None:
         raise ApiError("USER_INACTIVE", "비활성화된 계정입니다.", 403)
 
-    # 회원: 주간 1회 + 당일 빈 슬롯 추가 1회 + 20:00 이후 내일 추가 1회
-    mark_as_bonus = False
-    if not is_admin:
-        weekly_used = count_weekly_reservations(db, user_id, date_only) >= 1
-        if is_next_day_bonus_booking_allowed(date_only, current):
-            mark_as_bonus = True
-        elif is_same_day_extra_booking_allowed(date_only, current) and weekly_used:
-            mark_as_bonus = True
-        elif weekly_used:
-            raise ApiError(
-                "WEEKLY_LIMIT",
-                "이번 주(월~일) 기본 예약은 1회만 가능합니다. "
-                f"당일 빈 슬롯은 추가 1회, {format_hour(NEXT_DAY_BONUS_START_HOUR)} 이후 내일 슬롯은 추가 1회 예약할 수 있습니다.",
-            )
+    mark_as_bonus = _resolve_mark_as_bonus(db, user_id, date_only, current, is_admin)
 
     try:
         # 동시 예약은 DB unique(date, startHour) + IntegrityError 로 방지
@@ -266,6 +309,116 @@ def create_reservation(
         raise
 
 
+def create_group_reservation(
+    db: Session,
+    organizer_id: str,
+    target: date,
+    start_hour: int,
+    friend_ids: list[str],
+    current=None,
+) -> dict:
+    current = current or now_kst()
+    date_only = to_date_only(target)
+    friends = assert_are_friends(db, organizer_id, friend_ids)
+    organizer = db.query(User).filter(User.id == organizer_id).first()
+    if not organizer or not organizer.isActive or organizer.deletedAt is not None:
+        raise ApiError("USER_INACTIVE", "비활성화된 계정입니다.", 403)
+
+    participants = [organizer, *friends]
+    if len(participants) > MAX_GROUP_SIZE:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            f"단체 예약은 최대 {MAX_GROUP_SIZE}명까지 가능합니다.",
+        )
+
+    hours = [start_hour + index for index in range(len(participants))]
+    for hour in hours:
+        _assert_hour_open(date_only, hour)
+        _assert_date_and_time_bookable(date_only, hour, current, is_admin=False)
+
+    try:
+        taken = (
+            db.query(Reservation)
+            .filter(func.date(Reservation.date) == date_only, Reservation.startHour.in_(hours))
+            .all()
+        )
+        if taken:
+            labels = ", ".join(format_hour(row.startHour) for row in taken)
+            raise ApiError("SLOT_TAKEN", f"이미 예약된 시간이 포함되어 있습니다. ({labels})", 409)
+
+        marks: list[bool] = []
+        for user in participants:
+            display = format_member_display(user.dong, user.name)
+            mark = _resolve_mark_as_bonus(db, user.id, date_only, current, False, display)
+            if not mark:
+                week_start, week_end = get_week_range(date_only)
+                weekly_count = (
+                    db.query(Reservation)
+                    .filter(
+                        Reservation.userId == user.id,
+                        Reservation.isSameDayBooking.is_(False),
+                        func.date(Reservation.date) >= week_start,
+                        func.date(Reservation.date) <= week_end,
+                    )
+                    .count()
+                )
+                if weekly_count >= 1:
+                    raise ApiError(
+                        "WEEKLY_LIMIT",
+                        f"{display}님은 이번 주(월~일) 기본 예약을 이미 사용했습니다.",
+                    )
+            else:
+                bonus_count = (
+                    db.query(Reservation)
+                    .filter(
+                        Reservation.userId == user.id,
+                        Reservation.isSameDayBooking.is_(True),
+                        func.date(Reservation.date) == date_only,
+                    )
+                    .count()
+                )
+                if bonus_count >= 1:
+                    raise ApiError(
+                        "BONUS_LIMIT",
+                        f"{display}님은 해당 날짜 추가 예약을 이미 사용했습니다.",
+                    )
+            marks.append(mark)
+
+        group_id = generate_id()
+        created_at = now_kst().replace(tzinfo=None)
+        created: list[Reservation] = []
+        for user, hour, mark in zip(participants, hours, marks, strict=True):
+            reservation = Reservation(
+                userId=user.id,
+                date=date_to_datetime(date_only),
+                startHour=hour,
+                endHour=hour + 1,
+                isSameDayBooking=mark,
+                groupId=group_id,
+                organizerId=organizer_id,
+                createdAt=created_at,
+            )
+            db.add(reservation)
+            created.append(reservation)
+        db.commit()
+        for row in created:
+            db.refresh(row)
+        return {
+            "id": created[0].id,
+            "groupId": group_id,
+            "ids": [row.id for row in created],
+        }
+    except ApiError:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise ApiError("SLOT_TAKEN", "이미 예약된 시간이 포함되어 있습니다.", 409)
+    except Exception:
+        db.rollback()
+        raise
+
+
 def cancel_reservation(
     db: Session, reservation_id: str, user_id: str, is_admin: bool = False
 ) -> None:
@@ -273,7 +426,9 @@ def cancel_reservation(
     if not reservation:
         raise ApiError("NOT_FOUND", "예약을 찾을 수 없습니다.", 404)
 
-    if not is_admin and reservation.userId != user_id:
+    in_group = bool(reservation.groupId)
+    is_participant = reservation.userId == user_id or reservation.organizerId == user_id
+    if not is_admin and not is_participant:
         raise ApiError("FORBIDDEN", "본인 예약만 취소할 수 있습니다.", 403)
 
     # 관리자: 언제든 취소 / 회원: 예약 후 10분 이내 또는 예약 전날 22시 이전
@@ -287,7 +442,12 @@ def cancel_reservation(
             ),
         )
 
-    db.delete(reservation)
+    if in_group:
+        db.query(Reservation).filter(Reservation.groupId == reservation.groupId).delete(
+            synchronize_session=False
+        )
+    else:
+        db.delete(reservation)
     db.commit()
 
 

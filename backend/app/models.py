@@ -35,6 +35,10 @@ class User(Base):
 
     reservations: Mapped[list["Reservation"]] = relationship(back_populates="user")
     suggestions: Mapped[list["Suggestion"]] = relationship(back_populates="user")
+    friendships: Mapped[list["Friendship"]] = relationship(
+        back_populates="user",
+        foreign_keys="Friendship.userId",
+    )
 
     __table_args__ = (Index("User_dong_ho_idx", "dong", "ho"),)
 
@@ -48,6 +52,8 @@ class Reservation(Base):
     startHour: Mapped[int] = mapped_column(Integer)
     endHour: Mapped[int] = mapped_column(Integer)
     isSameDayBooking: Mapped[bool] = mapped_column(Boolean, default=False)
+    groupId: Mapped[str | None] = mapped_column(String(191), nullable=True, default=None)
+    organizerId: Mapped[str | None] = mapped_column(String(191), nullable=True, default=None)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
     updatedAt: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now(), onupdate=func.now()
@@ -59,6 +65,27 @@ class Reservation(Base):
         Index("Reservation_userId_date_idx", "userId", "date"),
         Index("Reservation_date_idx", "date"),
         Index("Reservation_date_startHour_key", "date", "startHour", unique=True),
+        Index("Reservation_groupId_idx", "groupId"),
+    )
+
+
+class Friendship(Base):
+    __tablename__ = "Friendship"
+
+    id: Mapped[str] = mapped_column(String(191), primary_key=True, default=lambda: generate_id())
+    userId: Mapped[str] = mapped_column(String(191), ForeignKey("User.id", ondelete="CASCADE"))
+    friendId: Mapped[str] = mapped_column(String(191), ForeignKey("User.id", ondelete="CASCADE"))
+    createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
+
+    user: Mapped[User] = relationship(
+        back_populates="friendships",
+        foreign_keys=[userId],
+    )
+    friend: Mapped[User] = relationship(foreign_keys=[friendId])
+
+    __table_args__ = (
+        Index("Friendship_userId_friendId_key", "userId", "friendId", unique=True),
+        Index("Friendship_userId_idx", "userId"),
     )
 
 

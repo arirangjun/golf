@@ -17,11 +17,12 @@ import {
 import { ko } from "date-fns/locale";
 import { nowKST, parseDateKST, getReservationDateTimeKST, startOfDayKST } from "./kst";
 
-/** Operating hours: 06:00 - 24:00 (09:00-10:00 cleaning) */
+/** Operating hours: 06:00 - 24:00 (weekday 09:00-10:00 cleaning) */
 export const OPERATING_START_HOUR = 6;
 export const OPERATING_END_HOUR = 24;
 export const CLEANING_START_HOUR = 9;
 export const CLEANING_END_HOUR = 10;
+export const MAX_GROUP_SIZE = 6;
 /** After 20:00, one bonus booking for the next day is allowed */
 export const NEXT_DAY_BONUS_START_HOUR = 20;
 export const CANCELLATION_HOURS_BEFORE = 3;
@@ -184,15 +185,22 @@ export function getAllDayHours(): number[] {
   return hours;
 }
 
-export function isCleaningHour(hour: number): boolean {
+export function isWeekend(date?: Date | string | null): boolean {
+  if (!date) return false;
+  const day = (typeof date === "string" ? parseDateInput(date) : toDateOnly(date)).getDay();
+  return day === 0 || day === 6;
+}
+
+export function isCleaningHour(hour: number, date?: Date | string | null): boolean {
+  if (isWeekend(date)) return false;
   return hour >= CLEANING_START_HOUR && hour < CLEANING_END_HOUR;
 }
 
-export function isOperatingHour(hour: number): boolean {
+export function isOperatingHour(hour: number, date?: Date | string | null): boolean {
   return (
     hour >= OPERATING_START_HOUR &&
     hour < OPERATING_END_HOUR &&
-    !isCleaningHour(hour)
+    !isCleaningHour(hour, date)
   );
 }
 

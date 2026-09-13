@@ -59,8 +59,8 @@ export async function getSlotsForDate(
 
   return getAllDayHours().map((hour) => {
     const reservation = bookedMap.get(hour);
-    const cleaning = isCleaningHour(hour);
-    const operating = isOperatingHour(hour);
+    const cleaning = isCleaningHour(hour, dateOnly);
+    const operating = isOperatingHour(hour, dateOnly);
     return {
       startHour: hour,
       endHour: hour + 1,
@@ -133,7 +133,7 @@ export async function createReservation(
   const now = nowKST();
   const dateOnly = toDateOnly(date);
 
-  if (isCleaningHour(startHour)) {
+  if (isCleaningHour(startHour, dateOnly)) {
     throw new ApiError(
       "VALIDATION_ERROR",
       `${formatHour(CLEANING_START_HOUR)} ~ ${formatHour(CLEANING_END_HOUR)}는 청소시간으로 예약할 수 없습니다.`

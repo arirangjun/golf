@@ -16,6 +16,7 @@ router = APIRouter(prefix="/reservations", tags=["reservations"])
 class CreateReservationBody(BaseModel):
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     startHour: int = Field(ge=6, le=23)
+    friendIds: list[str] = Field(default_factory=list)
 
 
 @router.get("")
@@ -32,6 +33,10 @@ def list_reservations(db: DbSession, session: SessionUser = Depends(member_user)
                 "canCancel": can_cancel_reservation(r.date, r.startHour, r.createdAt),
                 "timeLabel": f"{format_hour(r.startHour)} - {format_hour(r.endHour)}",
                 "createdAt": r.createdAt.isoformat() if r.createdAt else None,
+                "groupId": r.groupId,
+                "organizerId": r.organizerId,
+                "isGroup": bool(r.groupId),
+                "isOrganizer": r.organizerId == session.id if r.organizerId else False,
             }
             for r in reservations
         ]
@@ -45,6 +50,7 @@ def create(body: CreateReservationBody, db: DbSession, session: SessionUser = De
         user_id=session.id,
         target=parse_date_input(body.date),
         start_hour=body.startHour,
+        friend_ids=body.friendIds,
     )
     return result
 
