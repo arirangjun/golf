@@ -12,6 +12,7 @@ import {
   getAllDayHours,
   getWeekRange,
   isOperatingHour,
+  isCleaningHour,
   isNextDayBonusBookingAllowed,
   isSameDayExtraBookingAllowed,
   canBookDate,
@@ -22,6 +23,9 @@ import {
   getReservationDateTime,
   OPERATING_START_HOUR,
   OPERATING_END_HOUR,
+  CLEANING_START_HOUR,
+  CLEANING_END_HOUR,
+  NEXT_DAY_BONUS_START_HOUR,
 } from "./utils";
 import { nowKST } from "./kst";
 
@@ -31,6 +35,7 @@ export interface SlotInfo {
   available: boolean;
   isOperating: boolean;
   bookable: boolean;
+  isCleaning: boolean;
   reservationId?: string;
   displayLabel?: string;
   isMine?: boolean;
@@ -54,18 +59,22 @@ export async function getSlotsForDate(
 
   return getAllDayHours().map((hour) => {
     const reservation = bookedMap.get(hour);
+    const cleaning = isCleaningHour(hour);
     const operating = isOperatingHour(hour);
     return {
       startHour: hour,
       endHour: hour + 1,
       available: operating && !reservation && bookable,
       isOperating: operating,
-      bookable,
-      reservationId: reservation?.id,
-      displayLabel: reservation
-        ? formatMemberDisplay(reservation.user.dong, reservation.user.name)
-        : undefined,
-      isMine: reservation?.userId === currentUserId,
+      bookable: bookable && !cleaning,
+      isCleaning: cleaning,
+      reservationId: cleaning ? undefined : reservation?.id,
+      displayLabel: cleaning
+        ? "청소시간"
+        : reservation
+          ? formatMemberDisplay(reservation.user.dong, reservation.user.name)
+          : undefined,
+      isMine: cleaning ? false : reservation?.userId === currentUserId,
     };
   });
 }
@@ -124,6 +133,13 @@ export async function createReservation(
   const now = nowKST();
   const dateOnly = toDateOnly(date);
 
+  if (isCleaningHour(startHour)) {
+    throw new ApiError(
+      "VALIDATION_ERROR",
+      `${formatHour(CLEANING_START_HOUR)} ~ ${formatHour(CLEANING_END_HOUR)}는 청소시간으로 예약할 수 없습니다.`
+    );
+  }
+
   if (startHour < OPERATING_START_HOUR || startHour >= OPERATING_END_HOUR) {
     throw new ApiError(
       "VALIDATION_ERROR",
@@ -168,7 +184,7 @@ export async function createReservation(
     } else if (weeklyCount >= 1) {
       throw new ApiError(
         "WEEKLY_LIMIT",
-        "이번 주(월~일) 기본 예약은 1회만 가능합니다. 당일 빈 슬롯은 추가 1회, 21:00 이후 내일 슬롯은 추가 1회 예약이 가능합니다."
+        `이번 주(월~일) 기본 예약은 1회만 가능합니다. 당일 빈 슬롯은 추가 1회, ${formatHour(NEXT_DAY_BONUS_START_HOUR)} 이후 내일 슬롯은 추가 1회 예약이 가능합니다.`
       );
     }
   }

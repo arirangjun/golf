@@ -17,15 +17,17 @@ import {
 import { ko } from "date-fns/locale";
 import { nowKST, parseDateKST, getReservationDateTimeKST, startOfDayKST } from "./kst";
 
-/** Operating hours: 00:00 - 24:00 (24 slots) */
-export const OPERATING_START_HOUR = 0;
+/** Operating hours: 06:00 - 24:00 (09:00-10:00 cleaning) */
+export const OPERATING_START_HOUR = 6;
 export const OPERATING_END_HOUR = 24;
-/** After 21:00, one bonus booking for the next day is allowed */
-export const NEXT_DAY_BONUS_START_HOUR = 21;
+export const CLEANING_START_HOUR = 9;
+export const CLEANING_END_HOUR = 10;
+/** After 20:00, one bonus booking for the next day is allowed */
+export const NEXT_DAY_BONUS_START_HOUR = 20;
 export const CANCELLATION_HOURS_BEFORE = 3;
-/** Member cancel: within grace minutes after booking, or before 21:00 day before */
+/** Member cancel: within grace minutes after booking, or before 22:00 day before */
 export const CANCEL_GRACE_MINUTES = 10;
-export const CANCEL_DEADLINE_HOUR_DAY_BEFORE = 21;
+export const CANCEL_DEADLINE_HOUR_DAY_BEFORE = 22;
 /** Weekend open hour: Saturday 14:00 (weekdays allow this+next week anytime) */
 export const BOOKING_OPEN_HOUR = 14;
 
@@ -170,6 +172,11 @@ export function formatMemberDisplay(dong: string, name: string): string {
 }
 
 export function getOperatingHours(): number[] {
+  return getAllDayHours().filter((h) => isOperatingHour(h));
+}
+
+/** Grid hours: 06:00 ~ 23:00 (includes cleaning slot for display) */
+export function getAllDayHours(): number[] {
   const hours: number[] = [];
   for (let h = OPERATING_START_HOUR; h < OPERATING_END_HOUR; h++) {
     hours.push(h);
@@ -177,13 +184,16 @@ export function getOperatingHours(): number[] {
   return hours;
 }
 
-/** Full day grid: 00:00 ~ 23:00 (24 one-hour cells) */
-export function getAllDayHours(): number[] {
-  return Array.from({ length: 24 }, (_, i) => i);
+export function isCleaningHour(hour: number): boolean {
+  return hour >= CLEANING_START_HOUR && hour < CLEANING_END_HOUR;
 }
 
 export function isOperatingHour(hour: number): boolean {
-  return hour >= OPERATING_START_HOUR && hour < OPERATING_END_HOUR;
+  return (
+    hour >= OPERATING_START_HOUR &&
+    hour < OPERATING_END_HOUR &&
+    !isCleaningHour(hour)
+  );
 }
 
 export function getReservationDateTime(date: Date, startHour: number): Date {
@@ -219,7 +229,7 @@ export function canCancelReservation(
     }
   }
 
-  // 2) 예약 전날 21:00 이전
+  // 2) 예약 전날 22:00 이전
   const resDay = toDateOnly(reservationDate);
   const dayBefore = addDays(resDay, -1);
   const deadline = new Date(dayBefore);

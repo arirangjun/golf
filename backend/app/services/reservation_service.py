@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.exceptions import ApiError
 from app.models import Reservation, User
 from app.services.booking_rules import (
+    CLEANING_END_HOUR,
+    CLEANING_START_HOUR,
+    NEXT_DAY_BONUS_START_HOUR,
     OPERATING_END_HOUR,
     OPERATING_START_HOUR,
     can_book_date,
@@ -21,6 +24,7 @@ from app.services.booking_rules import (
     get_next_booking_open_time,
     get_reservation_datetime,
     get_week_range,
+    is_cleaning_hour,
     is_next_day_bonus_booking_allowed,
     is_operating_hour,
     is_same_day_extra_booking_allowed,
@@ -38,6 +42,7 @@ class SlotInfo:
     available: bool
     isOperating: bool
     bookable: bool
+    isCleaning: bool = False
     reservationId: str | None = None
     displayLabel: str | None = None
     isMine: bool | None = None
@@ -70,6 +75,7 @@ def get_slots_for_date(
     current = now_kst()
     for hour in get_all_day_hours():
         reservation = booked_map.get(hour)
+        cleaning = is_cleaning_hour(hour)
         operating = is_operating_hour(hour)
         # 관리자: 과거 슬롯도 예약 가능 / 회원: 과거 불가, 오픈 주간만
         slot_available = operating and reservation is None and bookable
@@ -83,14 +89,23 @@ def get_slots_for_date(
                 endHour=hour + 1,
                 available=slot_available,
                 isOperating=operating,
-                bookable=bookable,
-                reservationId=reservation.id if reservation else None,
+                bookable=bookable and not cleaning,
+                isCleaning=cleaning,
+                reservationId=None if cleaning else (reservation.id if reservation else None),
                 displayLabel=(
-                    format_member_display(reservation.user.dong, reservation.user.name)
-                    if reservation
-                    else None
+                    "청소시간"
+                    if cleaning
+                    else (
+                        format_member_display(reservation.user.dong, reservation.user.name)
+                        if reservation
+                        else None
+                    )
                 ),
-                isMine=reservation.userId == current_user_id if reservation else None,
+                isMine=(
+                    False
+                    if cleaning
+                    else (reservation.userId == current_user_id if reservation else None)
+                ),
             )
         )
     return slots
@@ -136,6 +151,12 @@ def create_reservation(
     current = now_kst()
     date_only = to_date_only(target)
 
+    if is_cleaning_hour(start_hour):
+        raise ApiError(
+            "VALIDATION_ERROR",
+            f"{format_hour(CLEANING_START_HOUR)} ~ {format_hour(CLEANING_END_HOUR)}는 청소시간으로 예약할 수 없습니다.",
+        )
+
     if start_hour < OPERATING_START_HOUR or start_hour >= OPERATING_END_HOUR:
         raise ApiError(
             "VALIDATION_ERROR",
@@ -165,7 +186,7 @@ def create_reservation(
     if not user or not user.isActive or user.deletedAt is not None:
         raise ApiError("USER_INACTIVE", "비활성화된 계정입니다.", 403)
 
-    # 회원: 주간 1회 + 당일 빈 슬롯 추가 1회 + 21:00 이후 내일 추가 1회
+    # 회원: 주간 1회 + 당일 빈 슬롯 추가 1회 + 20:00 이후 내일 추가 1회
     mark_as_bonus = False
     if not is_admin:
         weekly_used = count_weekly_reservations(db, user_id, date_only) >= 1
@@ -177,7 +198,7 @@ def create_reservation(
             raise ApiError(
                 "WEEKLY_LIMIT",
                 "이번 주(월~일) 기본 예약은 1회만 가능합니다. "
-                "당일 빈 슬롯은 추가 1회, 21:00 이후 내일 슬롯은 추가 1회 예약할 수 있습니다.",
+                f"당일 빈 슬롯은 추가 1회, {format_hour(NEXT_DAY_BONUS_START_HOUR)} 이후 내일 슬롯은 추가 1회 예약할 수 있습니다.",
             )
 
     try:
@@ -255,7 +276,7 @@ def cancel_reservation(
     if not is_admin and reservation.userId != user_id:
         raise ApiError("FORBIDDEN", "본인 예약만 취소할 수 있습니다.", 403)
 
-    # 관리자: 언제든 취소 / 회원: 예약 후 10분 이내 또는 예약 전날 21시 이전
+    # 관리자: 언제든 취소 / 회원: 예약 후 10분 이내 또는 예약 전날 22시 이전
     if not is_admin and not can_cancel_reservation(
         reservation.date, reservation.startHour, reservation.createdAt
     ):

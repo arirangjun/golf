@@ -71,7 +71,7 @@ class UpdateUserBody(BaseModel):
 class AdminCreateReservationBody(BaseModel):
     userId: str = Field(min_length=1)
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
-    startHour: int = Field(ge=0, le=23)
+    startHour: int = Field(ge=6, le=23)
 
 
 class ResetReservationsBody(BaseModel):

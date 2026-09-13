@@ -15,7 +15,7 @@ router = APIRouter(prefix="/reservations", tags=["reservations"])
 
 class CreateReservationBody(BaseModel):
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
-    startHour: int = Field(ge=0, le=23)
+    startHour: int = Field(ge=6, le=23)
 
 
 @router.get("")

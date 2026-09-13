@@ -3,12 +3,14 @@ from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
 
-OPERATING_START_HOUR = 0
+OPERATING_START_HOUR = 6
 OPERATING_END_HOUR = 24
-NEXT_DAY_BONUS_START_HOUR = 21
+CLEANING_START_HOUR = 9
+CLEANING_END_HOUR = 10
+NEXT_DAY_BONUS_START_HOUR = 20
 CANCELLATION_HOURS_BEFORE = 3  # legacy reference; member cancel uses grace + day-before deadline
 CANCEL_GRACE_MINUTES = 10
-CANCEL_DEADLINE_HOUR_DAY_BEFORE = 21  # 예약 전날 이 시각 이전까지 취소 가능
+CANCEL_DEADLINE_HOUR_DAY_BEFORE = 22  # 예약 전날 이 시각 이전까지 취소 가능
 BOOKING_OPEN_HOUR = 14
 DEFAULT_MEMBER_PASSWORD = "1"
 RESERVATION_RETENTION_DAYS = 365
@@ -158,11 +160,15 @@ def parse_date_input(date_str: str) -> date:
 
 
 def get_all_day_hours() -> list[int]:
-    return list(range(24))
+    return list(range(OPERATING_START_HOUR, OPERATING_END_HOUR))
+
+
+def is_cleaning_hour(hour: int) -> bool:
+    return CLEANING_START_HOUR <= hour < CLEANING_END_HOUR
 
 
 def is_operating_hour(hour: int) -> bool:
-    return OPERATING_START_HOUR <= hour < OPERATING_END_HOUR
+    return OPERATING_START_HOUR <= hour < OPERATING_END_HOUR and not is_cleaning_hour(hour)
 
 
 def get_reservation_datetime(reservation_date: date | datetime, start_hour: int) -> datetime:
@@ -216,7 +222,7 @@ def can_cancel_reservation(
     if is_within_cancel_grace(created_at, current):
         return True
 
-    # 2) 예약 전날 21:00 이전
+    # 2) 예약 전날 22:00 이전
     res_date = to_date_only(reservation_date)
     day_before = res_date - timedelta(days=1)
     deadline = datetime(

@@ -4,7 +4,14 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { format, addWeeks, subWeeks, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
 import { formatDateKST, isPastSlotKST, nowKST } from "@/lib/kst";
-import { canCancelReservation, cancelBlockedReason, parseDateInput } from "@/lib/utils";
+import {
+  CANCEL_DEADLINE_HOUR_DAY_BEFORE,
+  NEXT_DAY_BONUS_START_HOUR,
+  canCancelReservation,
+  cancelBlockedReason,
+  getAllDayHours,
+  parseDateInput,
+} from "@/lib/utils";
 import { StatusMessageModal } from "@/components/StatusMessageModal";
 
 interface Slot {
@@ -13,6 +20,7 @@ interface Slot {
   available: boolean;
   isOperating: boolean;
   bookable?: boolean;
+  isCleaning?: boolean;
   reservationId?: string;
   displayLabel?: string;
   isMine?: boolean;
@@ -35,7 +43,7 @@ interface Reservation {
 }
 
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const HOURS = getAllDayHours();
 
 function formatHour(h: number) {
   return `${String(h).padStart(2, "0")}:00`;
@@ -145,7 +153,7 @@ export function ReservationCalendar() {
       return;
     }
 
-    if (!slot.available || !slot.isOperating || isPastSlot(date, slot.startHour)) return;
+    if (slot.isCleaning || !slot.available || !slot.isOperating || isPastSlot(date, slot.startHour)) return;
 
     const res = await fetch("/api/reservations", {
       method: "POST",
@@ -178,6 +186,9 @@ export function ReservationCalendar() {
 
   const getCellClass = (date: string, slot: Slot | undefined) => {
     if (!slot) return "bg-gray-50";
+    if (slot.isCleaning) {
+      return "bg-amber-50 border-amber-200 cursor-not-allowed";
+    }
     const past = isPastSlot(date, slot.startHour);
     if (slot.isMine) {
       return past
@@ -205,6 +216,7 @@ export function ReservationCalendar() {
 
   const getCellLabel = (_date: string, slot: Slot | undefined) => {
     if (!slot) return "";
+    if (slot.isCleaning) return "청소시간";
     if (slot.isMine) return "내 예약";
     if (slot.reservationId || (!slot.available && slot.displayLabel)) {
       return slot.displayLabel?.slice(0, 6) ?? "예약";
@@ -258,6 +270,10 @@ export function ReservationCalendar() {
             <span className="inline-block h-3 w-3 rounded border bg-red-50" /> 예약됨
           </span>
           <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded border bg-amber-50 border-amber-200" />{" "}
+            청소시간
+          </span>
+          <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded border bg-gray-100" /> 예약 오픈 전
           </span>
           <span className="flex items-center gap-1.5">
@@ -269,10 +285,10 @@ export function ReservationCalendar() {
         <div className="mb-3 rounded-lg bg-blue-50 px-4 py-3 text-xs text-blue-800">
           {bookingWindowMessage && <p className="mb-1 font-medium">• {bookingWindowMessage}</p>}
           <p>• 주중(월~금): 이번 주(월~일) 언제든 예약 가능 · 주말: 토요일 14:00에 다음 주 오픈</p>
-          <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 00:00~24:00 전 시간대 예약 가능</p>
+          <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 06:00~24:00 예약 가능 (09:00~10:00 청소시간 제외)</p>
           <p>• 당일 빈 슬롯: 주간 예약과 별도로 추가 1회 예약 가능</p>
-          <p>• 21:00 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
-          <p>• 취소: 예약 후 10분 이내(예약 시간·당일 여부 무관), 또는 예약 전날 21:00 이전 · 내 예약 셀 클릭으로 취소</p>
+          <p>• {formatHour(NEXT_DAY_BONUS_START_HOUR)} 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
+          <p>• 취소: 예약 후 10분 이내(예약 시간·당일 여부 무관), 또는 예약 전날 {formatHour(CANCEL_DEADLINE_HOUR_DAY_BEFORE)} 이전 · 내 예약 셀 클릭으로 취소</p>
         </div>
 
         {loading ? (
@@ -298,7 +314,7 @@ export function ReservationCalendar() {
                 ))}
               </div>
 
-              {/* Body: 0~23시 세로 배치 — 시간열은 가로 스크롤 시 고정 */}
+              {/* Body: 06~23시 세로 배치 — 시간열은 가로 스크롤 시 고정 */}
               {HOURS.map((hour) => (
                 <div
                   key={hour}
@@ -311,8 +327,9 @@ export function ReservationCalendar() {
                     const slot = slotMap.get(`${day.date}-${hour}`);
                     const label = getCellLabel(day.date, slot);
                     const clickable =
-                      slot?.isMine ||
-                      (slot?.available && !isPastSlot(day.date, hour));
+                      !slot?.isCleaning &&
+                      (slot?.isMine ||
+                        (slot?.available && !isPastSlot(day.date, hour)));
 
                     return (
                       <button
@@ -321,17 +338,19 @@ export function ReservationCalendar() {
                         disabled={!clickable}
                         onClick={() => slot && handleCellClick(day.date, slot)}
                         title={
-                          slot?.isMine
-                            ? "클릭하여 취소"
-                            : slot?.available
-                              ? "클릭하여 예약"
-                              : slot?.bookable === false
-                                ? "예약 오픈 전"
-                                : slot?.displayLabel ?? "예약 불가"
+                          slot?.isCleaning
+                            ? "청소시간"
+                            : slot?.isMine
+                              ? "클릭하여 취소"
+                              : slot?.available
+                                ? "클릭하여 예약"
+                                : slot?.bookable === false
+                                  ? "예약 오픈 전"
+                                  : slot?.displayLabel ?? "예약 불가"
                         }
                         className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
                       >
-                        {!(slot?.isMine || slot?.reservationId) && (
+                        {!(slot?.isCleaning || slot?.isMine || slot?.reservationId) && (
                           <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[11px] text-gray-400/70 select-none sm:text-xs">
                             <span>{DAY_LABELS[dayIdx]}</span>
                             <span>{formatHour(hour)}</span>
@@ -340,7 +359,11 @@ export function ReservationCalendar() {
                         {label && (
                           <span
                             className={`relative z-[1] block truncate font-medium ${
-                              slot?.isMine ? "text-primary-700" : "text-red-600"
+                              slot?.isCleaning
+                                ? "text-amber-800"
+                                : slot?.isMine
+                                  ? "text-primary-700"
+                                  : "text-red-600"
                             }`}
                           >
                             {label}

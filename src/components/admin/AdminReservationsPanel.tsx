@@ -9,6 +9,7 @@ import {
 } from "date-fns";
 import { ko } from "date-fns/locale";
 import { StatusMessageModal } from "@/components/StatusMessageModal";
+import { getAllDayHours } from "@/lib/utils";
 
 interface Slot {
   startHour: number;
@@ -16,6 +17,7 @@ interface Slot {
   available: boolean;
   isOperating: boolean;
   bookable?: boolean;
+  isCleaning?: boolean;
   reservationId?: string;
   displayLabel?: string;
 }
@@ -49,7 +51,7 @@ function normalizeUnitPart(value: string, suffix: string) {
 }
 
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"] as const;
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const HOURS = getAllDayHours();
 
 function formatHour(h: number) {
   return `${String(h).padStart(2, "0")}:00`;
@@ -163,7 +165,7 @@ export function AdminReservationsPanel() {
       return;
     }
 
-    if (!slot.available || !slot.isOperating) return;
+    if (slot.isCleaning || !slot.available || !slot.isOperating) return;
 
     setPendingSlot({ date, startHour: slot.startHour });
     setDong("");
@@ -304,6 +306,9 @@ export function AdminReservationsPanel() {
 
   const getCellClass = (date: string, slot: Slot | undefined) => {
     if (!slot) return "bg-gray-50";
+    if (slot.isCleaning) {
+      return "bg-amber-50 border-amber-200 cursor-not-allowed";
+    }
     // 관리자: 과거 슬롯도 예약/취소 가능 · 빗금 없음
     if (!slot.available && slot.reservationId) {
       return "bg-red-50 border-red-100 cursor-pointer hover:bg-red-100";
@@ -314,6 +319,7 @@ export function AdminReservationsPanel() {
 
   const getCellLabel = (_date: string, slot: Slot | undefined) => {
     if (!slot) return "";
+    if (slot.isCleaning) return "청소시간";
     if (!slot.available && slot.displayLabel) {
       return slot.displayLabel.slice(0, 8);
     }
@@ -372,9 +378,14 @@ export function AdminReservationsPanel() {
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded border bg-red-50" /> 예약됨 (클릭 취소)
           </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded border bg-amber-50 border-amber-200" />{" "}
+            청소시간
+          </span>
         </div>
 
         <div className="mb-3 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-900">
+          <p>• 예약 가능 시간: 06:00~24:00 · 09:00~10:00은 청소시간으로 예약 불가</p>
           <p>• 관리자는 예약 오픈 시간·주간 제한 없이 예약/취소 가능</p>
           <p>• 빈 슬롯을 클릭한 뒤 동·호수를 입력하세요. 동일 세대가 여러 명이면 목록에서 선택합니다.</p>
           <p>• 이미 예약이 있는 회원에게 추가 예약 시 해당 주간 예약 일시를 모두 확인한 뒤 진행합니다.</p>
@@ -414,7 +425,7 @@ export function AdminReservationsPanel() {
                     const slot = slotMap.get(`${day.date}-${hour}`);
                     const label = getCellLabel(day.date, slot);
                     const clickable = Boolean(
-                      slot?.reservationId || slot?.available
+                      !slot?.isCleaning && (slot?.reservationId || slot?.available)
                     );
 
                     return (
@@ -424,22 +435,28 @@ export function AdminReservationsPanel() {
                         disabled={!clickable}
                         onClick={() => slot && handleCellClick(day.date, slot)}
                         title={
-                          slot?.reservationId
-                            ? `${slot.displayLabel} · 클릭하여 취소`
-                            : slot?.available
-                              ? "클릭하여 예약"
-                              : "예약 불가"
+                          slot?.isCleaning
+                            ? "청소시간"
+                            : slot?.reservationId
+                              ? `${slot.displayLabel} · 클릭하여 취소`
+                              : slot?.available
+                                ? "클릭하여 예약"
+                                : "예약 불가"
                         }
                         className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
                       >
-                        {!slot?.reservationId && (
+                        {!(slot?.isCleaning || slot?.reservationId) && (
                           <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[11px] text-gray-400/70 select-none sm:text-xs">
                             <span>{DAY_LABELS[dayIdx]}</span>
                             <span>{formatHour(hour)}</span>
                           </span>
                         )}
                         {label && (
-                          <span className="relative z-[1] block truncate font-medium text-red-600">
+                          <span
+                            className={`relative z-[1] block truncate font-medium ${
+                              slot?.isCleaning ? "text-amber-800" : "text-red-600"
+                            }`}
+                          >
                             {label}
                           </span>
                         )}
