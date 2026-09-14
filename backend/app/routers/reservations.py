@@ -59,7 +59,14 @@ def create(body: CreateReservationBody, db: DbSession, session: SessionUser = De
 def delete_reservation(
     db: DbSession,
     id: str = Query(...),
+    scope: str = Query("self", pattern=r"^(self|group)$"),
     session: SessionUser = Depends(member_user),
 ):
-    cancel_reservation(db, id, session.id, is_admin=False)
+    cancel_reservation(
+        db,
+        id,
+        session.id,
+        is_admin=False,
+        cancel_group=(scope == "group"),
+    )
     return {"ok": True}

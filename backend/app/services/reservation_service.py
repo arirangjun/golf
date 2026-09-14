@@ -420,15 +420,18 @@ def create_group_reservation(
 
 
 def cancel_reservation(
-    db: Session, reservation_id: str, user_id: str, is_admin: bool = False
+    db: Session,
+    reservation_id: str,
+    user_id: str,
+    is_admin: bool = False,
+    cancel_group: bool = False,
 ) -> None:
     reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
     if not reservation:
         raise ApiError("NOT_FOUND", "예약을 찾을 수 없습니다.", 404)
 
-    in_group = bool(reservation.groupId)
-    is_participant = reservation.userId == user_id or reservation.organizerId == user_id
-    if not is_admin and not is_participant:
+    # 회원: 본인 슬롯에서만 취소 요청 가능
+    if not is_admin and reservation.userId != user_id:
         raise ApiError("FORBIDDEN", "본인 예약만 취소할 수 있습니다.", 403)
 
     # 관리자: 언제든 취소 / 회원: 예약 후 10분 이내 또는 예약 전날 22시 이전
@@ -442,7 +445,7 @@ def cancel_reservation(
             ),
         )
 
-    if in_group:
+    if cancel_group and reservation.groupId:
         db.query(Reservation).filter(Reservation.groupId == reservation.groupId).delete(
             synchronize_session=False
         )

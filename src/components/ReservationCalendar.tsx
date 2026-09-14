@@ -45,6 +45,14 @@ interface Reservation {
   isGroup?: boolean;
 }
 
+interface PendingCancel {
+  id: string;
+  date: string;
+  startHour: number;
+  timeLabel?: string;
+  isGroup: boolean;
+}
+
 interface Friend {
   id: string;
   friendUserId: string;
@@ -81,6 +89,8 @@ export function ReservationCalendar() {
   } | null>(null);
   const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
   const [booking, setBooking] = useState(false);
+  const [pendingCancel, setPendingCancel] = useState<PendingCancel | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const cellRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const calendarScrollRef = useRef<HTMLDivElement>(null);
 
@@ -268,10 +278,18 @@ export function ReservationCalendar() {
         });
         return;
       }
-      const cancelText = reservation?.isGroup
-        ? `${date} ${formatHour(slot.startHour)} 단체 예약 전체를 취소하시겠습니까?`
-        : `${date} ${formatHour(slot.startHour)} 예약을 취소하시겠습니까?`;
-      if (!confirm(cancelText)) return;
+
+      if (reservation?.isGroup) {
+        setPendingCancel({
+          id: slot.reservationId,
+          date,
+          startHour: slot.startHour,
+          isGroup: true,
+        });
+        return;
+      }
+
+      if (!confirm(`${date} ${formatHour(slot.startHour)} 예약을 취소하시겠습니까?`)) return;
       const res = await fetch(`/api/reservations?id=${slot.reservationId}`, {
         method: "DELETE",
       });
@@ -333,16 +351,75 @@ export function ReservationCalendar() {
     }
   };
 
+  const closeCancelConfirm = () => {
+    if (cancelling) return;
+    setPendingCancel(null);
+  };
+
+  const executeCancel = async (scope: "self" | "group") => {
+    if (!pendingCancel || cancelling) return;
+    setCancelling(true);
+    setMessage(null);
+    try {
+      const res = await fetch(
+        `/api/reservations?id=${pendingCancel.id}&scope=${scope}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setPendingCancel(null);
+        setMessage({
+          type: "success",
+          text:
+            scope === "group"
+              ? "단체 예약 전체가 취소되었습니다."
+              : "본인 예약이 취소되었습니다.",
+        });
+        fetchWeek();
+        fetchReservations();
+      } else {
+        setMessage({ type: "error", text: data.error?.message ?? "취소 실패" });
+      }
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const handleCancel = async (id: string) => {
     const reservation = myReservations.find((item) => item.id === id);
-    if (
-      !confirm(
-        reservation?.isGroup
-          ? "단체 예약 전체를 취소하시겠습니까?"
-          : "예약을 취소하시겠습니까?"
-      )
-    )
+    if (!reservation) return;
+
+    const allowCancel =
+      reservation.canCancel ||
+      canCancelReservation(
+        parseDateInput(reservation.date),
+        reservation.startHour,
+        reservation.createdAt
+      );
+    if (!allowCancel) {
+      setMessage({
+        type: "error",
+        text: cancelBlockedReason(
+          parseDateInput(reservation.date),
+          reservation.startHour,
+          reservation.createdAt
+        ),
+      });
       return;
+    }
+
+    if (reservation.isGroup) {
+      setPendingCancel({
+        id: reservation.id,
+        date: reservation.date,
+        startHour: reservation.startHour,
+        timeLabel: reservation.timeLabel,
+        isGroup: true,
+      });
+      return;
+    }
+
+    if (!confirm("예약을 취소하시겠습니까?")) return;
     setMessage(null);
     const res = await fetch(`/api/reservations?id=${id}`, { method: "DELETE" });
     const data = await res.json();
@@ -473,7 +550,7 @@ export function ReservationCalendar() {
           <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 06:00~24:00 예약 가능 (주중 09:00~10:00 청소시간 제외, 토·일은 청소시간 없음)</p>
           <p>• 당일 빈 슬롯: 주간 예약과 별도로 추가 1회 예약 가능</p>
           <p>• {formatHour(NEXT_DAY_BONUS_START_HOUR)} 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
-          <p>• 단체 예약: 친구를 선택한 인원수만큼 연속 시간을 한 번에 예약 (본인 포함 최대 {MAX_GROUP_SIZE}명)</p>
+          <p>• 단체 예약: 친구를 선택한 인원수만큼 연속 시간을 한 번에 예약 (본인 포함 최대 {MAX_GROUP_SIZE}명) · 취소 시 본인만/전체 선택 가능</p>
           <p>• 취소: 예약 후 10분 이내(예약 시간·당일 여부 무관), 또는 예약 전날 {formatHour(CANCEL_DEADLINE_HOUR_DAY_BEFORE)} 이전 · 내 예약 셀 클릭으로 취소</p>
         </div>
 
@@ -679,6 +756,58 @@ export function ReservationCalendar() {
             </div>
           </div>
         </>
+      )}
+
+      {pendingCancel && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={closeCancelConfirm}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-confirm-title"
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="cancel-confirm-title" className="text-lg font-semibold text-gray-900">
+              단체 예약 취소
+            </h3>
+            <p className="mt-2 text-sm text-gray-700">
+              {pendingCancel.date}{" "}
+              {pendingCancel.timeLabel ?? formatHour(pendingCancel.startHour)}
+            </p>
+            <p className="mt-1 text-sm text-gray-500">
+              본인 시간만 취소할지, 단체 예약 전체를 취소할지 선택해 주세요.
+            </p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => executeCancel("self")}
+                className="w-full rounded-lg border border-primary-200 bg-primary-50 px-3 py-2.5 text-sm font-medium text-primary-800 hover:bg-primary-100 disabled:opacity-60"
+              >
+                {cancelling ? "취소 중..." : "본인만 취소"}
+              </button>
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => executeCancel("group")}
+                className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+              >
+                {cancelling ? "취소 중..." : "전체 취소"}
+              </button>
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={closeCancelConfirm}
+                className="w-full rounded-lg border px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
