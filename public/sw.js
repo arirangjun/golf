@@ -1,4 +1,4 @@
-const CACHE_NAME = "golf-member-v6";
+const CACHE_NAME = "golf-member-v7";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
