@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { format, addWeeks, subWeeks, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
 import { formatDateKST, isPastSlotKST, nowKST } from "@/lib/kst";
@@ -75,6 +75,14 @@ export function ReservationCalendar() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [hoverRange, setHoverRange] = useState<{ date: string; startHour: number } | null>(null);
+  const [pendingBooking, setPendingBooking] = useState<{
+    date: string;
+    startHour: number;
+  } | null>(null);
+  const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
+  const [booking, setBooking] = useState(false);
+  const cellRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const calendarScrollRef = useRef<HTMLDivElement>(null);
 
   const fetchWeek = useCallback(async () => {
     setLoading(true);
@@ -123,6 +131,11 @@ export function ReservationCalendar() {
   }, [fetchFriends]);
 
   useEffect(() => {
+    setPendingBooking(null);
+    setConfirmPos(null);
+  }, [weekStart]);
+
+  useEffect(() => {
     const valid = new Set(friends.map((friend) => friend.friendUserId));
     setSelectedFriendIds((prev) => prev.filter((id) => valid.has(id)));
   }, [friends]);
@@ -167,6 +180,49 @@ export function ReservationCalendar() {
   const isInHoverRange = (date: string, hour: number) => {
     if (!hoverRange || hoverRange.date !== date) return false;
     return hour >= hoverRange.startHour && hour < hoverRange.startHour + groupSize;
+  };
+
+  const isInPendingRange = (date: string, hour: number) => {
+    if (!pendingBooking || pendingBooking.date !== date) return false;
+    return (
+      hour >= pendingBooking.startHour &&
+      hour < pendingBooking.startHour + groupSize
+    );
+  };
+
+  const updateConfirmPosition = useCallback(() => {
+    if (!pendingBooking) {
+      setConfirmPos(null);
+      return;
+    }
+    const el = cellRefs.current.get(`${pendingBooking.date}-${pendingBooking.startHour}`);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setConfirmPos({
+      top: rect.top,
+      left: rect.left + rect.width / 2,
+    });
+  }, [pendingBooking]);
+
+  useEffect(() => {
+    if (!pendingBooking) {
+      setConfirmPos(null);
+      return;
+    }
+    updateConfirmPosition();
+    const scrollEl = calendarScrollRef.current;
+    window.addEventListener("resize", updateConfirmPosition);
+    scrollEl?.addEventListener("scroll", updateConfirmPosition, { passive: true });
+    return () => {
+      window.removeEventListener("resize", updateConfirmPosition);
+      scrollEl?.removeEventListener("scroll", updateConfirmPosition);
+    };
+  }, [pendingBooking, updateConfirmPosition, weekDays]);
+
+  const closeBookingConfirm = () => {
+    if (booking) return;
+    setPendingBooking(null);
+    setConfirmPos(null);
   };
 
   const toggleFriend = (friendUserId: string) => {
@@ -241,37 +297,39 @@ export function ReservationCalendar() {
       return;
     }
 
-    const endHour = slot.startHour + groupSize;
-    if (groupMode) {
-      const names = friends
-        .filter((friend) => selectedFriendIds.includes(friend.friendUserId))
-        .map((friend) => friend.name)
-        .join(", ");
-      const ok = confirm(
-        `${date} ${formatHour(slot.startHour)}-${formatHour(endHour)} · ${groupSize}명 단체 예약\n나 + ${names}\n\n예약할까요?`
-      );
-      if (!ok) return;
-    }
+    setHoverRange(null);
+    setPendingBooking({ date, startHour: slot.startHour });
+  };
 
-    const res = await fetch("/api/reservations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date,
-        startHour: slot.startHour,
-        friendIds: selectedFriendIds,
-      }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setMessage({
-        type: "success",
-        text: groupMode ? "단체 예약이 완료되었습니다." : "예약이 완료되었습니다.",
+  const confirmBooking = async () => {
+    if (!pendingBooking || booking) return;
+    setBooking(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/reservations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: pendingBooking.date,
+          startHour: pendingBooking.startHour,
+          friendIds: selectedFriendIds,
+        }),
       });
-      fetchWeek();
-      fetchReservations();
-    } else {
-      setMessage({ type: "error", text: data.error?.message ?? "예약 실패" });
+      const data = await res.json();
+      if (res.ok) {
+        setPendingBooking(null);
+        setConfirmPos(null);
+        setMessage({
+          type: "success",
+          text: groupMode ? "단체 예약이 완료되었습니다." : "예약이 완료되었습니다.",
+        });
+        fetchWeek();
+        fetchReservations();
+      } else {
+        setMessage({ type: "error", text: data.error?.message ?? "예약 실패" });
+      }
+    } finally {
+      setBooking(false);
     }
   };
 
@@ -302,8 +360,12 @@ export function ReservationCalendar() {
     if (slot.isCleaning) {
       return "bg-amber-50 border-amber-200 cursor-not-allowed";
     }
+    const pending = isInPendingRange(date, slot.startHour);
+    if (pending && !slot.isMine && !slot.reservationId) {
+      return "bg-primary-300 border-primary-500 ring-2 ring-primary-400 ring-inset cursor-pointer";
+    }
     const hovering = isInHoverRange(date, slot.startHour);
-    if (hovering && !slot.isMine && !slot.reservationId) {
+    if (hovering && !slot.isMine && !slot.reservationId && !pendingBooking) {
       return isRangeBookable(date, hoverRange!.startHour, groupSize)
         ? "bg-primary-200 border-primary-400 cursor-pointer"
         : "bg-red-100 border-red-200 cursor-not-allowed";
@@ -458,6 +520,7 @@ export function ReservationCalendar() {
           <p className="py-12 text-center text-gray-500">로딩 중...</p>
         ) : (
           <div
+            ref={calendarScrollRef}
             className="max-h-[600px] overflow-auto rounded-xl border border-gray-200"
             onMouseLeave={() => setHoverRange(null)}
           >
@@ -503,8 +566,14 @@ export function ReservationCalendar() {
                       <button
                         key={`${day.date}-${hour}`}
                         type="button"
-                        disabled={!clickable}
+                        ref={(el) => {
+                          const key = `${day.date}-${hour}`;
+                          if (el) cellRefs.current.set(key, el);
+                          else cellRefs.current.delete(key);
+                        }}
+                        disabled={!clickable || booking}
                         onMouseEnter={() => {
+                          if (pendingBooking) return;
                           if (!slot || slot.isCleaning || slot.isMine || slot.reservationId) {
                             setHoverRange(null);
                             return;
@@ -555,6 +624,62 @@ export function ReservationCalendar() {
           </div>
         )}
       </div>
+
+      {pendingBooking && confirmPos && (
+        <>
+          <div
+            className="fixed inset-0 z-[55]"
+            onClick={closeBookingConfirm}
+            aria-hidden="true"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="booking-confirm-title"
+            className="fixed z-[60] w-[min(18rem,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-full rounded-xl border border-primary-200 bg-white p-3 shadow-xl"
+            style={{ top: confirmPos.top - 10, left: confirmPos.left }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-8 border-t-8 border-x-transparent border-t-white drop-shadow" />
+            <h3 id="booking-confirm-title" className="text-sm font-semibold text-gray-900">
+              예약할까요?
+            </h3>
+            <p className="mt-1 text-sm text-gray-700">
+              {pendingBooking.date}{" "}
+              {formatHour(pendingBooking.startHour)}
+              {groupSize > 1
+                ? `-${formatHour(pendingBooking.startHour + groupSize)}`
+                : ""}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {groupMode
+                ? `단체 ${groupSize}명 · 연속 ${groupSize}시간 (나 + ${friends
+                    .filter((friend) => selectedFriendIds.includes(friend.friendUserId))
+                    .map((friend) => friend.name)
+                    .join(", ")})`
+                : "개인 예약 1시간"}
+            </p>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeBookingConfirm}
+                disabled={booking}
+                className="rounded-lg border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={confirmBooking}
+                disabled={booking}
+                className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
+              >
+                {booking ? "예약 중..." : "예약"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold text-gray-900">내 예약 목록</h2>

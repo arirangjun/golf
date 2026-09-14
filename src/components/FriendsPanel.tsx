@@ -26,7 +26,6 @@ export function FriendsPanel() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [dong, setDong] = useState("");
   const [ho, setHo] = useState("");
-  const [name, setName] = useState("");
   const [results, setResults] = useState<SearchUser[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -60,7 +59,6 @@ export function FriendsPanel() {
       const params = new URLSearchParams();
       if (dong.trim()) params.set("dong", dong.trim());
       if (ho.trim()) params.set("ho", ho.trim());
-      if (name.trim()) params.set("name", name.trim());
       const res = await fetch(`/api/friends/search?${params.toString()}`);
       const data = await res.json();
       if (res.ok) {
@@ -112,29 +110,25 @@ export function FriendsPanel() {
         등록된 회원 중에서 친구를 추가하면 단체 예약에 함께 선택할 수 있습니다.
       </p>
 
-      <form onSubmit={handleSearch} className="mb-4 grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+      <form onSubmit={handleSearch} className="mb-4 flex flex-wrap items-center gap-2">
         <input
           value={dong}
           onChange={(e) => setDong(e.target.value)}
           placeholder="동"
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+          required
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
         />
         <input
           value={ho}
           onChange={(e) => setHo(e.target.value)}
           placeholder="호수"
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
-        />
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="이름"
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+          required
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
         />
         <button
           type="submit"
           disabled={searching}
-          className="rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
+          className="shrink-0 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
         >
           {searching ? "검색 중..." : "검색"}
         </button>

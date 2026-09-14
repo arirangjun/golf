@@ -54,21 +54,16 @@ def search_members(
 ) -> list[dict]:
     dong_key = _norm_unit(dong, "동")
     ho_key = _norm_unit(ho, "호")
-    name_key = name.strip()
-    if not dong_key and not ho_key and not name_key:
-        raise ApiError("VALIDATION_ERROR", "동·호수 또는 이름을 입력해 주세요.")
+    if not dong_key or not ho_key:
+        raise ApiError("VALIDATION_ERROR", "동과 호수를 입력해 주세요.")
 
     query = _active_member_query(db).filter(User.id != user_id)
-    if dong_key:
-        query = query.filter(
-            or_(User.dong == dong_key, User.dong == f"{dong_key}동", User.dong.contains(dong_key))
-        )
-    if ho_key:
-        query = query.filter(
-            or_(User.ho == ho_key, User.ho == f"{ho_key}호", User.ho.contains(ho_key))
-        )
-    if name_key:
-        query = query.filter(User.name.contains(name_key))
+    query = query.filter(
+        or_(User.dong == dong_key, User.dong == f"{dong_key}동", User.dong.contains(dong_key))
+    )
+    query = query.filter(
+        or_(User.ho == ho_key, User.ho == f"{ho_key}호", User.ho.contains(ho_key))
+    )
 
     users = query.order_by(User.dong.asc(), User.ho.asc(), User.name.asc()).limit(20).all()
     existing = {
