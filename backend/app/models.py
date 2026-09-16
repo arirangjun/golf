@@ -100,3 +100,28 @@ class Suggestion(Base):
     user: Mapped[User] = relationship(back_populates="suggestions")
 
     __table_args__ = (Index("Suggestion_createdAt_idx", "createdAt"),)
+
+
+class SlotOverrideMode(str, enum.Enum):
+    BLOCKED = "BLOCKED"
+    FORCE_OPEN = "FORCE_OPEN"
+
+
+class SlotOverride(Base):
+    """관리자가 날짜·시간 단위로 예약가능/불가를 덮어쓰는 설정."""
+
+    __tablename__ = "SlotOverride"
+
+    id: Mapped[str] = mapped_column(String(191), primary_key=True, default=lambda: generate_id())
+    date: Mapped[datetime] = mapped_column(DateTime(timezone=False))
+    startHour: Mapped[int] = mapped_column(Integer)
+    mode: Mapped[SlotOverrideMode] = mapped_column(Enum(SlotOverrideMode))
+    createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
+    updatedAt: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("SlotOverride_date_startHour_key", "date", "startHour", unique=True),
+        Index("SlotOverride_date_idx", "date"),
+    )

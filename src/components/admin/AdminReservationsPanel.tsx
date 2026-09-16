@@ -20,6 +20,7 @@ interface Slot {
   isCleaning?: boolean;
   reservationId?: string;
   displayLabel?: string;
+  overrideMode?: "BLOCKED" | "FORCE_OPEN" | null;
 }
 
 interface DaySlots {
@@ -42,6 +43,12 @@ interface AdminUser {
 interface PendingSlot {
   date: string;
   startHour: number;
+}
+
+interface SlotActionTarget {
+  date: string;
+  startHour: number;
+  slot: Slot;
 }
 
 function normalizeUnitPart(value: string, suffix: string) {
@@ -73,6 +80,8 @@ export function AdminReservationsPanel() {
   const [resetOpen, setResetOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [slotAction, setSlotAction] = useState<SlotActionTarget | null>(null);
+  const [savingOverride, setSavingOverride] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     const res = await fetch("/api/admin/users");
@@ -165,12 +174,90 @@ export function AdminReservationsPanel() {
       return;
     }
 
-    if (slot.isCleaning || !slot.available || !slot.isOperating) return;
+    // 빈 칸·청소·예약불가: 설정/예약 선택 팝업
+    setSlotAction({ date, startHour: slot.startHour, slot });
+  };
 
-    setPendingSlot({ date, startHour: slot.startHour });
+  const closeSlotAction = () => {
+    if (savingOverride) return;
+    setSlotAction(null);
+  };
+
+  const openMemberBookingFromAction = () => {
+    if (!slotAction) return;
+    const { date, startHour, slot } = slotAction;
+    const canBook =
+      slot.available &&
+      !slot.isCleaning &&
+      (slot.overrideMode !== "BLOCKED") &&
+      (slot.isOperating || slot.overrideMode === "FORCE_OPEN");
+    if (!canBook) {
+      setMessage({ type: "error", text: "현재 예약할 수 없는 시간입니다. 먼저 예약 가능으로 설정해 주세요." });
+      return;
+    }
+    setSlotAction(null);
+    setPendingSlot({ date, startHour });
     setDong("");
     setHo("");
     setMatches(null);
+  };
+
+  const saveOverride = async (mode: "BLOCKED" | "FORCE_OPEN") => {
+    if (!slotAction) return;
+    setSavingOverride(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/slot-overrides", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: slotAction.date,
+          startHour: slotAction.startHour,
+          mode,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSlotAction(null);
+        setMessage({
+          type: "success",
+          text:
+            mode === "BLOCKED"
+              ? `${slotAction.date} ${formatHour(slotAction.startHour)}을(를) 예약 불가로 설정했습니다.`
+              : `${slotAction.date} ${formatHour(slotAction.startHour)}을(를) 예약 가능으로 설정했습니다.`,
+        });
+        fetchWeek();
+      } else {
+        setMessage({ type: "error", text: data.error?.message ?? "설정 실패" });
+      }
+    } finally {
+      setSavingOverride(false);
+    }
+  };
+
+  const clearOverride = async () => {
+    if (!slotAction) return;
+    setSavingOverride(true);
+    setMessage(null);
+    try {
+      const res = await fetch(
+        `/api/admin/slot-overrides?date=${encodeURIComponent(slotAction.date)}&startHour=${slotAction.startHour}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setSlotAction(null);
+        setMessage({
+          type: "success",
+          text: `${slotAction.date} ${formatHour(slotAction.startHour)} 설정을 기본값으로 되돌렸습니다.`,
+        });
+        fetchWeek();
+      } else {
+        setMessage({ type: "error", text: data.error?.message ?? "설정 해제 실패" });
+      }
+    } finally {
+      setSavingOverride(false);
+    }
   };
 
   const closeBookingModal = () => {
@@ -304,22 +391,31 @@ export function AdminReservationsPanel() {
     setMatches(found);
   };
 
-  const getCellClass = (date: string, slot: Slot | undefined) => {
+  const getCellClass = (_date: string, slot: Slot | undefined) => {
     if (!slot) return "bg-gray-50";
-    if (slot.isCleaning) {
-      return "bg-amber-50 border-amber-200 cursor-not-allowed";
-    }
-    // 관리자: 과거 슬롯도 예약/취소 가능 · 빗금 없음
-    if (!slot.available && slot.reservationId) {
+    if (slot.reservationId) {
       return "bg-red-50 border-red-100 cursor-pointer hover:bg-red-100";
     }
-    if (!slot.available) return "bg-gray-50 cursor-not-allowed";
-    return "bg-white hover:bg-primary-50 hover:border-primary-300 cursor-pointer";
+    if (slot.overrideMode === "BLOCKED") {
+      return "bg-gray-200 border-gray-300 cursor-pointer hover:bg-gray-300";
+    }
+    if (slot.isCleaning) {
+      return "bg-amber-50 border-amber-200 cursor-pointer hover:bg-amber-100";
+    }
+    if (slot.overrideMode === "FORCE_OPEN" || slot.available) {
+      return "bg-white hover:bg-primary-50 hover:border-primary-300 cursor-pointer";
+    }
+    return "bg-gray-50 cursor-pointer hover:bg-gray-100";
   };
 
   const getCellLabel = (_date: string, slot: Slot | undefined) => {
     if (!slot) return "";
+    if (slot.reservationId && slot.displayLabel) {
+      return slot.displayLabel.slice(0, 8);
+    }
+    if (slot.overrideMode === "BLOCKED") return "예약불가";
     if (slot.isCleaning) return "청소시간";
+    if (slot.overrideMode === "FORCE_OPEN") return "가능";
     if (!slot.available && slot.displayLabel) {
       return slot.displayLabel.slice(0, 8);
     }
@@ -366,7 +462,7 @@ export function AdminReservationsPanel() {
         </div>
 
         <p className="mb-4 text-xs text-gray-500">
-          빈 칸 클릭 → 동·호수 입력 후 예약 · 예약된 칸 클릭 → 취소
+          빈 칸 클릭 → 회원 예약 / 예약가능·불가 설정 · 예약된 칸 클릭 → 취소
         </p>
 
         <StatusMessageModal message={message} onClose={() => setMessage(null)} />
@@ -379,15 +475,18 @@ export function AdminReservationsPanel() {
             <span className="inline-block h-3 w-3 rounded border bg-red-50" /> 예약됨 (클릭 취소)
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-3 w-3 rounded border bg-amber-50 border-amber-200" />{" "}
+            <span className="inline-block h-3 w-3 rounded border border-amber-200 bg-amber-50" />{" "}
             청소시간
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded border border-gray-300 bg-gray-200" />{" "}
+            예약불가(설정)
           </span>
         </div>
 
         <div className="mb-3 rounded-lg bg-amber-50 px-4 py-3 text-xs text-amber-900">
-          <p>• 예약 가능 시간: 06:00~24:00 · 주중 09:00~10:00은 청소시간 · 토·일은 09시도 예약 가능</p>
-          <p>• 관리자는 예약 오픈 시간·주간 제한 없이 예약/취소 가능</p>
-          <p>• 빈 슬롯을 클릭한 뒤 동·호수를 입력하세요. 동일 세대가 여러 명이면 목록에서 선택합니다.</p>
+          <p>• 예약 가능 시간: 06:00~24:00 · 주중 09:00~10:00은 청소시간 · 토·일·법정공휴일은 09시도 예약 가능</p>
+          <p>• 빈 칸을 클릭하면 회원 예약 또는 예약가능/불가 설정을 선택할 수 있습니다.</p>
           <p>• 이미 예약이 있는 회원에게 추가 예약 시 해당 주간 예약 일시를 모두 확인한 뒤 진행합니다.</p>
         </div>
 
@@ -424,9 +523,7 @@ export function AdminReservationsPanel() {
                   {weekDays.map((day, dayIdx) => {
                     const slot = slotMap.get(`${day.date}-${hour}`);
                     const label = getCellLabel(day.date, slot);
-                    const clickable = Boolean(
-                      !slot?.isCleaning && (slot?.reservationId || slot?.available)
-                    );
+                    const clickable = Boolean(slot);
 
                     return (
                       <button
@@ -435,17 +532,18 @@ export function AdminReservationsPanel() {
                         disabled={!clickable}
                         onClick={() => slot && handleCellClick(day.date, slot)}
                         title={
-                          slot?.isCleaning
-                            ? "청소시간"
-                            : slot?.reservationId
-                              ? `${slot.displayLabel} · 클릭하여 취소`
-                              : slot?.available
-                                ? "클릭하여 예약"
-                                : "예약 불가"
+                          slot?.reservationId
+                            ? `${slot.displayLabel} · 클릭하여 취소`
+                            : "클릭하여 예약/설정"
                         }
                         className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
                       >
-                        {!(slot?.isCleaning || slot?.reservationId) && (
+                        {!(
+                          slot?.isCleaning ||
+                          slot?.reservationId ||
+                          slot?.overrideMode === "BLOCKED" ||
+                          slot?.overrideMode === "FORCE_OPEN"
+                        ) && (
                           <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-tight text-[11px] text-gray-400/70 select-none sm:text-xs">
                             <span>{DAY_LABELS[dayIdx]}</span>
                             <span>{formatHour(hour)}</span>
@@ -454,7 +552,13 @@ export function AdminReservationsPanel() {
                         {label && (
                           <span
                             className={`relative z-[1] block truncate font-medium ${
-                              slot?.isCleaning ? "text-amber-800" : "text-red-600"
+                              slot?.overrideMode === "BLOCKED"
+                                ? "text-gray-700"
+                                : slot?.isCleaning
+                                  ? "text-amber-800"
+                                  : slot?.overrideMode === "FORCE_OPEN"
+                                    ? "text-primary-700"
+                                    : "text-red-600"
                             }`}
                           >
                             {label}
@@ -508,6 +612,83 @@ export function AdminReservationsPanel() {
           </ul>
         )}
       </div>
+
+      {slotAction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={closeSlotAction}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="slot-action-title"
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="slot-action-title" className="text-lg font-semibold text-gray-900">
+              시간 설정
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              {slotAction.date} {formatHour(slotAction.startHour)}
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              {slotAction.slot.overrideMode === "BLOCKED"
+                ? "현재: 예약불가 설정"
+                : slotAction.slot.overrideMode === "FORCE_OPEN"
+                  ? "현재: 예약가능 설정"
+                  : slotAction.slot.isCleaning
+                    ? "현재: 청소시간"
+                    : slotAction.slot.available
+                      ? "현재: 예약 가능"
+                      : "현재: 기본 예약 불가"}
+            </p>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                disabled={savingOverride}
+                onClick={openMemberBookingFromAction}
+                className="w-full rounded-lg bg-primary-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
+              >
+                회원 예약
+              </button>
+              <button
+                type="button"
+                disabled={savingOverride}
+                onClick={() => saveOverride("FORCE_OPEN")}
+                className="w-full rounded-lg border border-primary-200 bg-primary-50 px-3 py-2.5 text-sm font-medium text-primary-800 hover:bg-primary-100 disabled:opacity-60"
+              >
+                예약 가능으로 설정
+              </button>
+              <button
+                type="button"
+                disabled={savingOverride}
+                onClick={() => saveOverride("BLOCKED")}
+                className="w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-200 disabled:opacity-60"
+              >
+                예약 불가로 설정
+              </button>
+              {slotAction.slot.overrideMode && (
+                <button
+                  type="button"
+                  disabled={savingOverride}
+                  onClick={clearOverride}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  기본으로 되돌리기
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={savingOverride}
+                onClick={closeSlotAction}
+                className="w-full rounded-lg border px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 disabled:opacity-60"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingSlot && (
         <div

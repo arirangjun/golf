@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.exceptions import ApiError
-from app.models import Reservation, User, generate_id
+from app.models import Reservation, SlotOverride, SlotOverrideMode, User, generate_id
 from app.services.friend_service import assert_are_friends
 from app.services.booking_rules import (
     CLEANING_END_HOUR,
@@ -48,12 +48,22 @@ class SlotInfo:
     reservationId: str | None = None
     displayLabel: str | None = None
     isMine: bool | None = None
+    overrideMode: str | None = None
 
 
 @dataclass
 class DaySlots:
     date: str
     slots: list[SlotInfo]
+
+
+def _overrides_for_date(db: Session, date_only: date) -> dict[int, SlotOverrideMode]:
+    rows = (
+        db.query(SlotOverride)
+        .filter(func.date(SlotOverride.date) == date_only)
+        .all()
+    )
+    return {row.startHour: row.mode for row in rows}
 
 
 def get_slots_for_date(
@@ -71,43 +81,78 @@ def get_slots_for_date(
     )
 
     booked_map = {r.startHour: r for r in reservations}
-    bookable = True if admin_view else can_book_date(date_only)
+    override_map = _overrides_for_date(db, date_only)
+    week_bookable = True if admin_view else can_book_date(date_only)
 
     slots: list[SlotInfo] = []
     current = now_kst()
     for hour in get_all_day_hours():
         reservation = booked_map.get(hour)
-        cleaning = is_cleaning_hour(hour, date_only)
-        operating = is_operating_hour(hour, date_only)
-        # 관리자: 과거 슬롯도 예약 가능 / 회원: 과거 불가, 오픈 주간만
-        slot_available = operating and reservation is None and bookable
+        override = override_map.get(hour)
+        default_cleaning = is_cleaning_hour(hour, date_only)
+
+        if override == SlotOverrideMode.BLOCKED:
+            cleaning = False
+            operating = OPERATING_START_HOUR <= hour < OPERATING_END_HOUR
+            slot_available = False
+            bookable_flag = False
+            display = (
+                format_member_display(reservation.user.dong, reservation.user.name)
+                if reservation
+                else "예약불가"
+            )
+            reservation_id = reservation.id if reservation else None
+            is_mine = reservation.userId == current_user_id if reservation else None
+        elif override == SlotOverrideMode.FORCE_OPEN:
+            cleaning = False
+            operating = OPERATING_START_HOUR <= hour < OPERATING_END_HOUR
+            slot_available = operating and reservation is None and week_bookable
+            bookable_flag = week_bookable
+            display = (
+                format_member_display(reservation.user.dong, reservation.user.name)
+                if reservation
+                else None
+            )
+            reservation_id = reservation.id if reservation else None
+            is_mine = reservation.userId == current_user_id if reservation else None
+        else:
+            cleaning = default_cleaning
+            operating = is_operating_hour(hour, date_only)
+            slot_available = operating and reservation is None and week_bookable
+            bookable_flag = week_bookable and not cleaning
+            display = (
+                "청소시간"
+                if cleaning
+                else (
+                    format_member_display(reservation.user.dong, reservation.user.name)
+                    if reservation
+                    else None
+                )
+            )
+            reservation_id = None if cleaning else (reservation.id if reservation else None)
+            is_mine = (
+                False
+                if cleaning
+                else (reservation.userId == current_user_id if reservation else None)
+            )
+
         if slot_available and not admin_view:
             slot_time = get_reservation_datetime(date_only, hour)
             if slot_time <= current:
                 slot_available = False
+
         slots.append(
             SlotInfo(
                 startHour=hour,
                 endHour=hour + 1,
                 available=slot_available,
                 isOperating=operating,
-                bookable=bookable and not cleaning,
+                bookable=bookable_flag,
                 isCleaning=cleaning,
-                reservationId=None if cleaning else (reservation.id if reservation else None),
-                displayLabel=(
-                    "청소시간"
-                    if cleaning
-                    else (
-                        format_member_display(reservation.user.dong, reservation.user.name)
-                        if reservation
-                        else None
-                    )
-                ),
-                isMine=(
-                    False
-                    if cleaning
-                    else (reservation.userId == current_user_id if reservation else None)
-                ),
+                reservationId=reservation_id,
+                displayLabel=display,
+                isMine=is_mine,
+                overrideMode=override.value if override else None,
             )
         )
     return slots
@@ -176,7 +221,21 @@ def _assert_date_and_time_bookable(
         )
 
 
-def _assert_hour_open(date_only: date, hour: int) -> None:
+def _assert_hour_open(db: Session, date_only: date, hour: int) -> None:
+    override = (
+        db.query(SlotOverride)
+        .filter(func.date(SlotOverride.date) == date_only, SlotOverride.startHour == hour)
+        .first()
+    )
+    if override and override.mode == SlotOverrideMode.BLOCKED:
+        raise ApiError("VALIDATION_ERROR", "관리자에 의해 예약이 불가능한 시간입니다.")
+    if override and override.mode == SlotOverrideMode.FORCE_OPEN:
+        if hour < OPERATING_START_HOUR or hour >= OPERATING_END_HOUR:
+            raise ApiError(
+                "VALIDATION_ERROR",
+                f"예약 가능 시간은 {format_hour(OPERATING_START_HOUR)} ~ {format_hour(OPERATING_END_HOUR)} 입니다.",
+            )
+        return
     if is_cleaning_hour(hour, date_only):
         raise ApiError(
             "VALIDATION_ERROR",
@@ -187,6 +246,54 @@ def _assert_hour_open(date_only: date, hour: int) -> None:
             "VALIDATION_ERROR",
             f"예약 가능 시간은 {format_hour(OPERATING_START_HOUR)} ~ {format_hour(OPERATING_END_HOUR)} 입니다.",
         )
+
+
+def upsert_slot_override(
+    db: Session, target: date, start_hour: int, mode: str
+) -> SlotOverride:
+    date_only = to_date_only(target)
+    if start_hour < OPERATING_START_HOUR or start_hour >= OPERATING_END_HOUR:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            f"설정 가능 시간은 {format_hour(OPERATING_START_HOUR)} ~ {format_hour(OPERATING_END_HOUR)} 입니다.",
+        )
+    try:
+        mode_enum = SlotOverrideMode(mode)
+    except ValueError as exc:
+        raise ApiError("VALIDATION_ERROR", "mode는 BLOCKED 또는 FORCE_OPEN 이어야 합니다.") from exc
+
+    existing = (
+        db.query(SlotOverride)
+        .filter(func.date(SlotOverride.date) == date_only, SlotOverride.startHour == start_hour)
+        .first()
+    )
+    if existing:
+        existing.mode = mode_enum
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    row = SlotOverride(
+        date=date_to_datetime(date_only),
+        startHour=start_hour,
+        mode=mode_enum,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def clear_slot_override(db: Session, target: date, start_hour: int) -> None:
+    date_only = to_date_only(target)
+    deleted = (
+        db.query(SlotOverride)
+        .filter(func.date(SlotOverride.date) == date_only, SlotOverride.startHour == start_hour)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    if not deleted:
+        raise ApiError("NOT_FOUND", "해당 시간 설정이 없습니다.", 404)
 
 
 def _resolve_mark_as_bonus(
@@ -235,7 +342,7 @@ def create_reservation(
             current=current,
         )
 
-    _assert_hour_open(date_only, start_hour)
+    _assert_hour_open(db, date_only, start_hour)
     _assert_date_and_time_bookable(date_only, start_hour, current, is_admin)
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -333,7 +440,7 @@ def create_group_reservation(
 
     hours = [start_hour + index for index in range(len(participants))]
     for hour in hours:
-        _assert_hour_open(date_only, hour)
+        _assert_hour_open(db, date_only, hour)
         _assert_date_and_time_bookable(date_only, hour, current, is_admin=False)
 
     try:

@@ -74,3 +74,20 @@ model Suggestion {
 
   @@index([createdAt])
 }
+
+enum SlotOverrideMode {
+  BLOCKED
+  FORCE_OPEN
+}
+
+model SlotOverride {
+  id        String           @id @default(cuid())
+  date      DateTime
+  startHour Int
+  mode      SlotOverrideMode
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([date, startHour])
+  @@index([date])
+}

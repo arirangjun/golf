@@ -22,7 +22,7 @@ export const OPERATING_START_HOUR = 6;
 export const OPERATING_END_HOUR = 24;
 export const CLEANING_START_HOUR = 9;
 export const CLEANING_END_HOUR = 10;
-export const MAX_GROUP_SIZE = 6;
+export const MAX_GROUP_SIZE = 3;
 /** After 20:00, one bonus booking for the next day is allowed */
 export const NEXT_DAY_BONUS_START_HOUR = 20;
 export const CANCELLATION_HOURS_BEFORE = 3;
@@ -192,6 +192,7 @@ export function isWeekend(date?: Date | string | null): boolean {
 }
 
 export function isCleaningHour(hour: number, date?: Date | string | null): boolean {
+  // 주말에는 청소시간 없음. 법정공휴일은 서버 슬롯 API가 최종 판정.
   if (isWeekend(date)) return false;
   return hour >= CLEANING_START_HOUR && hour < CLEANING_END_HOUR;
 }

@@ -34,6 +34,7 @@ from app.services.member_service import (
 )
 from app.services.reservation_service import (
     cancel_reservation,
+    clear_slot_override,
     count_user_reservations_within_retention,
     create_reservation,
     get_all_reservations,
@@ -44,6 +45,7 @@ from app.services.reservation_service import (
     get_user_reservations_in_week,
     get_user_upcoming_reservations,
     reset_all_reservations,
+    upsert_slot_override,
 )
 from app.services.excel_service import build_stats_export_buffer
 
@@ -76,6 +78,12 @@ class AdminCreateReservationBody(BaseModel):
 
 class ResetReservationsBody(BaseModel):
     password: str = Field(min_length=1)
+
+
+class SlotOverrideBody(BaseModel):
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    startHour: int = Field(ge=6, le=23)
+    mode: str = Field(pattern=r"^(BLOCKED|FORCE_OPEN)$")
 
 
 @router.get("/users")
@@ -364,6 +372,34 @@ def admin_slots_week(
         "weekEnd": format_date(week_end_date),
         "days": [{"date": day.date, "slots": [slot.__dict__ for slot in day.slots]} for day in days],
     }
+
+
+@router.put("/slot-overrides")
+def admin_upsert_slot_override(
+    body: SlotOverrideBody,
+    db: DbSession,
+    _admin: SessionUser = Depends(admin_user),
+):
+    row = upsert_slot_override(db, parse_date_input(body.date), body.startHour, body.mode)
+    return {
+        "override": {
+            "id": row.id,
+            "date": format_date(row.date),
+            "startHour": row.startHour,
+            "mode": row.mode.value,
+        }
+    }
+
+
+@router.delete("/slot-overrides")
+def admin_clear_slot_override(
+    db: DbSession,
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    startHour: int = Query(..., ge=6, le=23),
+    _admin: SessionUser = Depends(admin_user),
+):
+    clear_slot_override(db, parse_date_input(date), startHour)
+    return {"ok": True}
 
 
 @router.get("/stats")
