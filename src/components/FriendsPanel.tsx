@@ -22,7 +22,7 @@ interface SearchUser {
   alreadyFriend: boolean;
 }
 
-export function FriendsPanel() {
+export function FriendsPanel({ friendSearchEnabled = false }: { friendSearchEnabled?: boolean }) {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [dong, setDong] = useState("");
   const [ho, setHo] = useState("");
@@ -53,6 +53,10 @@ export function FriendsPanel() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!friendSearchEnabled) {
+      setError("친구 검색에 동의한 회원만 검색할 수 있습니다. 개인정보이용현황에서 동의해 주세요.");
+      return;
+    }
     setSearching(true);
     setError("");
     try {
@@ -108,6 +112,11 @@ export function FriendsPanel() {
       <h2 className="mb-1 text-lg font-semibold text-gray-900">친구</h2>
       <p className="mb-4 text-sm text-gray-500">
         등록된 회원 중에서 친구를 추가하면 단체 예약에 함께 선택할 수 있습니다.
+        {!friendSearchEnabled && (
+          <span className="mt-1 block text-amber-700">
+            친구 검색(선택) 동의 후 검색·추가가 가능합니다. 개인정보이용현황 탭에서 동의해 주세요.
+          </span>
+        )}
       </p>
 
       <form onSubmit={handleSearch} className="mb-4 flex flex-wrap items-center gap-2">
@@ -116,18 +125,20 @@ export function FriendsPanel() {
           onChange={(e) => setDong(e.target.value)}
           placeholder="동"
           required
-          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+          disabled={!friendSearchEnabled}
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100"
         />
         <input
           value={ho}
           onChange={(e) => setHo(e.target.value)}
           placeholder="호수"
           required
-          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500"
+          disabled={!friendSearchEnabled}
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary-500 disabled:bg-gray-100"
         />
         <button
           type="submit"
-          disabled={searching}
+          disabled={searching || !friendSearchEnabled}
           className="shrink-0 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
         >
           {searching ? "검색 중..." : "검색"}

@@ -22,6 +22,7 @@ def init_database() -> dict:
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
     _ensure_user_deleted_at_column(engine)
+    _ensure_user_consent_columns(engine)
     _ensure_reservation_group_columns(engine)
     assert database.SessionLocal is not None
     db = database.SessionLocal()
@@ -49,6 +50,29 @@ def _ensure_user_deleted_at_column(engine) -> None:
         print("Added User.deletedAt column for soft-delete")
     except Exception as exc:  # noqa: BLE001
         print(f"Warning: ensure User.deletedAt failed: {type(exc).__name__}: {exc!r}")
+
+
+def _ensure_user_consent_columns(engine) -> None:
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("User")}
+        statements: list[str] = []
+        if "privacyConsentAt" not in columns:
+            statements.append("ALTER TABLE `User` ADD COLUMN `privacyConsentAt` DATETIME NULL")
+        if "friendSearchConsent" not in columns:
+            statements.append(
+                "ALTER TABLE `User` ADD COLUMN `friendSearchConsent` BOOLEAN NOT NULL DEFAULT 0"
+            )
+        if not statements:
+            return
+        with engine.begin() as conn:
+            for stmt in statements:
+                conn.execute(text(stmt))
+        print("Added User privacy consent columns")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: ensure User consent columns failed: {type(exc).__name__}: {exc!r}")
 
 
 def _ensure_reservation_group_columns(engine) -> None:

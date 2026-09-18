@@ -112,6 +112,45 @@ def authenticate_member(db: Session, dong: str, ho: str, password: str) -> User:
     return matches[0]
 
 
+def user_public_dict(user: User) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role.value,
+        "privacyConsentAt": user.privacyConsentAt.isoformat() if user.privacyConsentAt else None,
+        "friendSearchConsent": bool(user.friendSearchConsent),
+        "privacyConsented": user.privacyConsentAt is not None,
+    }
+
+
+def update_member_consent(
+    db: Session,
+    user_id: str,
+    *,
+    privacyConsent: bool | None = None,
+    friendSearchConsent: bool | None = None,
+) -> User:
+    user = db.query(User).filter(User.id == user_id, User.role == Role.USER).first()
+    if not user or not user.isActive or user.deletedAt is not None:
+        raise ApiError("FORBIDDEN", "접근 권한이 없습니다.", 403)
+
+    if privacyConsent is True and user.privacyConsentAt is None:
+        user.privacyConsentAt = now_kst().replace(tzinfo=None)
+    if privacyConsent is False:
+        raise ApiError("VALIDATION_ERROR", "필수 개인정보 이용 동의는 철회할 수 없습니다.")
+
+    if friendSearchConsent is not None:
+        user.friendSearchConsent = bool(friendSearchConsent)
+
+    if user.privacyConsentAt is None:
+        raise ApiError("VALIDATION_ERROR", "개인정보 이용에 동의해 주세요.")
+
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def to_session_user(user: User) -> SessionUser:
     return SessionUser(id=user.id, email=user.email, name=user.name, role=user.role)
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, EmailStr, Field
 
 from app.dependencies import DbSession, SessionToken, admin_user, member_user
+from app.models import Role, User
 from app.services.auth_service import (
     SessionUser,
     authenticate_admin,
@@ -11,6 +12,8 @@ from app.services.auth_service import (
     decode_token,
     set_session_cookie,
     to_session_user,
+    update_member_consent,
+    user_public_dict,
 )
 from app.services.member_service import change_member_password
 
@@ -30,11 +33,9 @@ class AdminLoginBody(BaseModel):
     password: str = Field(min_length=1)
 
 
-class UserResponse(BaseModel):
-    id: str
-    email: str
-    name: str
-    role: str
+class ConsentBody(BaseModel):
+    privacyConsent: bool | None = None
+    friendSearchConsent: bool | None = None
 
 
 @router.post("/login")
@@ -48,14 +49,16 @@ def login(body: dict, response: Response, db: DbSession):
 
     session_user = to_session_user(user)
     set_session_cookie(response, session_user)
-    return {
-        "user": {
-            "id": session_user.id,
-            "email": session_user.email,
-            "name": session_user.name,
-            "role": session_user.role.value,
+    if user.role == Role.ADMIN:
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "role": user.role.value,
+            }
         }
-    }
+    return {"user": user_public_dict(user)}
 
 
 @router.post("/logout")
@@ -65,20 +68,44 @@ def logout(response: Response):
 
 
 @router.get("/me")
-def me(token: SessionToken):
+def me(token: SessionToken, db: DbSession):
     if not token:
         return {"user": None}
     session = decode_token(token)
     if not session:
         return {"user": None}
-    return {
-        "user": {
-            "id": session.id,
-            "email": session.email,
-            "name": session.name,
-            "role": session.role.value,
+    user = db.query(User).filter(User.id == session.id).first()
+    if not user or not user.isActive:
+        return {"user": None}
+    if user.role == Role.ADMIN:
+        return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "role": user.role.value,
+            }
         }
-    }
+    return {"user": user_public_dict(user)}
+
+
+@router.post("/consent")
+def save_consent(
+    body: ConsentBody,
+    db: DbSession,
+    session: SessionUser = Depends(member_user),
+):
+    if body.privacyConsent is None and body.friendSearchConsent is None:
+        from app.exceptions import ApiError
+
+        raise ApiError("VALIDATION_ERROR", "변경할 동의 항목을 선택해 주세요.")
+    user = update_member_consent(
+        db,
+        session.id,
+        privacyConsent=body.privacyConsent,
+        friendSearchConsent=body.friendSearchConsent,
+    )
+    return {"user": user_public_dict(user)}
 
 
 class ChangePasswordBody(BaseModel):

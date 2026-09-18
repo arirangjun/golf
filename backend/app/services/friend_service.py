@@ -57,7 +57,17 @@ def search_members(
     if not dong_key or not ho_key:
         raise ApiError("VALIDATION_ERROR", "동과 호수를 입력해 주세요.")
 
-    query = _active_member_query(db).filter(User.id != user_id)
+    me = _active_member_query(db).filter(User.id == user_id).first()
+    if not me or not me.friendSearchConsent:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "친구 검색에 동의한 회원만 검색할 수 있습니다. 개인정보이용현황에서 동의해 주세요.",
+        )
+
+    query = _active_member_query(db).filter(
+        User.id != user_id,
+        User.friendSearchConsent.is_(True),
+    )
     query = query.filter(
         or_(User.dong == dong_key, User.dong == f"{dong_key}동", User.dong.contains(dong_key))
     )
@@ -88,7 +98,18 @@ def add_friend(db: Session, user_id: str, friend_id: str) -> dict:
     if friend_id == user_id:
         raise ApiError("VALIDATION_ERROR", "자기 자신은 친구로 추가할 수 없습니다.")
 
-    friend = _active_member_query(db).filter(User.id == friend_id).first()
+    me = _active_member_query(db).filter(User.id == user_id).first()
+    if not me or not me.friendSearchConsent:
+        raise ApiError(
+            "VALIDATION_ERROR",
+            "친구 검색에 동의한 회원만 친구를 추가할 수 있습니다. 개인정보이용현황에서 동의해 주세요.",
+        )
+
+    friend = (
+        _active_member_query(db)
+        .filter(User.id == friend_id, User.friendSearchConsent.is_(True))
+        .first()
+    )
     if not friend:
         raise ApiError("NOT_FOUND", "추가할 회원을 찾을 수 없습니다.", 404)
 

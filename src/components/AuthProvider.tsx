@@ -8,6 +8,9 @@ interface User {
   email: string;
   name: string;
   role: Role;
+  privacyConsented?: boolean;
+  privacyConsentAt?: string | null;
+  friendSearchConsent?: boolean;
 }
 
 interface MemberLoginInput {

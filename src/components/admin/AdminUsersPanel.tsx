@@ -15,6 +15,8 @@ interface AdminUser {
   role: Role;
   isActive: boolean;
   reservationCount: number;
+  privacyConsented?: boolean;
+  friendSearchConsent?: boolean;
 }
 
 const emptyForm = {
@@ -410,6 +412,8 @@ export function AdminUsersPanel() {
               <th className="px-4 py-3 font-medium">이름</th>
               <th className="px-4 py-3 font-medium">휴대폰</th>
               <th className="px-4 py-3 font-medium">상태</th>
+              <th className="px-4 py-3 font-medium">필수동의</th>
+              <th className="px-4 py-3 font-medium">친구검색</th>
               <th className="px-4 py-3 font-medium">예약 수</th>
               <th className="px-4 py-3 font-medium">관리</th>
             </tr>
@@ -417,13 +421,13 @@ export function AdminUsersPanel() {
           <tbody className="divide-y">
             {members.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                   등록된 회원이 없습니다. 위에서 회원을 등록해 주세요.
                 </td>
               </tr>
             ) : filteredMembers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                   검색 결과가 없습니다.
                 </td>
               </tr>
@@ -442,6 +446,24 @@ export function AdminUsersPanel() {
                       }`}
                     >
                       {user.isActive ? "활성" : "비활성"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs font-medium ${
+                        user.privacyConsented ? "text-green-700" : "text-gray-400"
+                      }`}
+                    >
+                      {user.privacyConsented ? "동의" : "미동의"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs font-medium ${
+                        user.friendSearchConsent ? "text-green-700" : "text-gray-400"
+                      }`}
+                    >
+                      {user.friendSearchConsent ? "동의" : "미동의"}
                     </span>
                   </td>
                   <td className="px-4 py-3">{user.reservationCount}</td>

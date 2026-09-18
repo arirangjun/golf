@@ -28,6 +28,12 @@ class User(Base):
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.USER)
     isActive: Mapped[bool] = mapped_column(Boolean, default=True)
     deletedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True, default=None)
+    # 필수: 개인정보 이용 동의 시각 (None이면 미동의)
+    privacyConsentAt: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True, default=None
+    )
+    # 선택: 친구검색 노출·이용 동의
+    friendSearchConsent: Mapped[bool] = mapped_column(Boolean, default=False)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
     updatedAt: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now(), onupdate=func.now()

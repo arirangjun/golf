@@ -23,6 +23,8 @@ model User {
   role         Role          @default(USER)
   isActive     Boolean       @default(true)
   deletedAt    DateTime?
+  privacyConsentAt DateTime?
+  friendSearchConsent Boolean @default(false)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   reservations Reservation[]

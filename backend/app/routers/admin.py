@@ -111,6 +111,9 @@ def list_users(db: DbSession, _admin: SessionUser = Depends(admin_user)):
                 "isActive": user.isActive,
                 "createdAt": user.createdAt.isoformat(),
                 "reservationCount": reservation_count,
+                "privacyConsented": user.privacyConsentAt is not None,
+                "privacyConsentAt": user.privacyConsentAt.isoformat() if user.privacyConsentAt else None,
+                "friendSearchConsent": bool(user.friendSearchConsent),
             }
         )
     return {"users": result}
