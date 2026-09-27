@@ -89,7 +89,8 @@ export function LoginForm({ mode = "member" }: { mode?: LoginMode }) {
           />
           {!isAdminMode && (
             <p className="mt-1 text-xs text-gray-400">
-              같은 동·호수에 여러 명이 있으면 비밀번호로 구분합니다.
+              초기비밀번호는 1이며 동일세대 추가인원은 2,로 구분하며 최초 접속후 비밀번호를
+              바꿔주세요.
             </p>
           )}
         </div>
