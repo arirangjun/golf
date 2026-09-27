@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { LoginForm } from "@/components/LoginForm";
+import { PWAInstallButton } from "@/components/PWAInstallButton";
 import { FriendsPanel } from "@/components/FriendsPanel";
 import { PrivacyConsentForm } from "@/components/PrivacyConsentForm";
 import { PrivacyStatusPanel } from "@/components/PrivacyStatusPanel";
@@ -35,7 +36,8 @@ export function HomePage() {
 
   if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-green-100 p-4">
+      <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 to-green-100 p-4">
+        <PWAInstallButton />
         <LoginForm mode="member" />
       </div>
     );
@@ -80,7 +82,8 @@ export function HomePage() {
             <h1 className="text-xl font-bold text-gray-900">스크린골프 예약</h1>
             <p className="text-sm text-gray-500">{user.name}님, 환영합니다</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PWAInstallButton placement="header" />
             <button
               type="button"
               onClick={() => setPasswordOpen(true)}

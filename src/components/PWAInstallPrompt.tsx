@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -92,46 +92,76 @@ export function PWAInstallPrompt() {
   const [desktop, setDesktop] = useState(false);
   const [inApp, setInApp] = useState<InAppKind>(null);
   const [copied, setCopied] = useState(false);
+  const deferredRef = useRef<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     if (isStandalone()) return;
-    if (localStorage.getItem(storageKey) === "1") return;
 
+    const dismissed = localStorage.getItem(storageKey) === "1";
     const desktopEnv = isDesktop();
     setDesktop(desktopEnv);
 
-    const inAppKind = detectInAppBrowser();
-    if (inAppKind) {
-      setInApp(inAppKind);
-      setVisible(true);
-      return;
-    }
-
-    if (isIos()) {
-      setIosHint(true);
-      setVisible(true);
-      return;
-    }
-
     const onBeforeInstall = (event: Event) => {
       event.preventDefault();
-      setDeferred(event as BeforeInstallPromptEvent);
+      const promptEvent = event as BeforeInstallPromptEvent;
+      deferredRef.current = promptEvent;
+      setDeferred(promptEvent);
+      if (localStorage.getItem(storageKey) !== "1") setVisible(true);
+    };
+
+    const onRequest = () => {
+      if (isStandalone()) return;
+      setDesktop(isDesktop());
+
+      const promptEvent = deferredRef.current;
+      if (promptEvent) {
+        void (async () => {
+          await promptEvent.prompt();
+          await promptEvent.userChoice;
+          deferredRef.current = null;
+          setDeferred(null);
+          setVisible(false);
+          localStorage.setItem(storageKey, "1");
+          if (!isAdmin) {
+            window.dispatchEvent(new CustomEvent("pwa-install-dismissed"));
+          }
+        })();
+        return;
+      }
+
+      const inAppKind = detectInAppBrowser();
+      if (inAppKind) {
+        setInApp(inAppKind);
+      } else if (isIos()) {
+        setIosHint(true);
+      }
       setVisible(true);
     };
 
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("pwa-install-request", onRequest);
 
-    // PC는 더 빨리 안내 (Chrome/Edge 설치 가능)
-    const delayMs = desktopEnv ? 800 : 2500;
-    const timer = window.setTimeout(() => {
-      setVisible(true);
-    }, delayMs);
+    let timer: number | undefined;
+    if (!dismissed) {
+      const inAppKind = detectInAppBrowser();
+      if (inAppKind) {
+        setInApp(inAppKind);
+        setVisible(true);
+      } else if (isIos()) {
+        setIosHint(true);
+        setVisible(true);
+      } else {
+        const delayMs = desktopEnv ? 800 : 2500;
+        timer = window.setTimeout(() => setVisible(true), delayMs);
+      }
+    }
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
-      window.clearTimeout(timer);
+      window.removeEventListener("pwa-install-request", onRequest);
+      if (timer) window.clearTimeout(timer);
     };
-  }, [storageKey]);
+  }, [storageKey, isAdmin]);
 
   const dismiss = () => {
     localStorage.setItem(storageKey, "1");
@@ -146,6 +176,7 @@ export function PWAInstallPrompt() {
     if (!deferred) return;
     await deferred.prompt();
     await deferred.userChoice;
+    deferredRef.current = null;
     setDeferred(null);
     setVisible(false);
     localStorage.setItem(storageKey, "1");
