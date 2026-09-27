@@ -63,7 +63,6 @@ export function LoginForm({ mode = "member" }: { mode?: LoginMode }) {
                 value={dong}
                 onChange={(e) => setDong(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="101"
                 required
               />
             </div>
@@ -73,7 +72,6 @@ export function LoginForm({ mode = "member" }: { mode?: LoginMode }) {
                 value={ho}
                 onChange={(e) => setHo(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="1001"
                 required
               />
             </div>
@@ -86,7 +84,7 @@ export function LoginForm({ mode = "member" }: { mode?: LoginMode }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            placeholder={isAdminMode ? "••••••••" : "1"}
+            placeholder={isAdminMode ? "••••••••" : undefined}
             required
           />
           {!isAdminMode && (
