@@ -32,10 +32,37 @@ interface MonthlyMemberStats {
     phone: string;
     displayName: string;
     count: number;
+    selfCount: number;
+    friendCount: number;
+    adminCount: number;
   }[];
   totalReservations: number;
   uniqueMembers: number;
 }
+
+type BookedByType = "SELF" | "FRIEND" | "ADMIN";
+
+interface ReservationDetail {
+  id: string;
+  displayName: string;
+  date: string;
+  time: string;
+  bookedByType: BookedByType;
+  bookedByLabel: string;
+}
+
+const BOOKED_BY_FILTERS: { id: "ALL" | BookedByType; label: string }[] = [
+  { id: "ALL", label: "전체" },
+  { id: "SELF", label: "본인" },
+  { id: "FRIEND", label: "친구" },
+  { id: "ADMIN", label: "관리자" },
+];
+
+const BOOKED_BY_BADGE: Record<BookedByType, string> = {
+  SELF: "bg-gray-100 text-gray-700",
+  FRIEND: "bg-blue-50 text-blue-700",
+  ADMIN: "bg-amber-50 text-amber-700",
+};
 
 function formatHour(h: number) {
   return `${String(h).padStart(2, "0")}:00`;
@@ -51,6 +78,8 @@ export function AdminStatsPanel() {
   const [loading, setLoading] = useState(true);
   const [memberLoading, setMemberLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [details, setDetails] = useState<ReservationDetail[] | null>(null);
+  const [detailFilter, setDetailFilter] = useState<"ALL" | BookedByType>("ALL");
 
   const downloadStatsExcel = async () => {
     setExporting(true);
@@ -91,9 +120,19 @@ export function AdminStatsPanel() {
     setMemberLoading(false);
   }, [selectedMonth]);
 
+  const fetchDetails = useCallback(async () => {
+    const res = await fetch(`/api/admin/stats/reservations?from=${from}&to=${to}`);
+    const data = await res.json();
+    setDetails(res.ok ? data.reservations ?? [] : null);
+  }, [from, to]);
+
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
+
+  useEffect(() => {
+    fetchDetails();
+  }, [fetchDetails]);
 
   useEffect(() => {
     fetchMemberStats();
@@ -181,6 +220,9 @@ export function AdminStatsPanel() {
                       <th className="px-4 py-2 font-medium">회원 (동/이름)</th>
                       <th className="px-4 py-2 font-medium">휴대폰</th>
                       <th className="px-4 py-2 font-medium">예약 횟수</th>
+                      <th className="px-4 py-2 font-medium">본인</th>
+                      <th className="px-4 py-2 font-medium">친구</th>
+                      <th className="px-4 py-2 font-medium">관리자</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -190,6 +232,9 @@ export function AdminStatsPanel() {
                         <td className="px-4 py-2 font-medium text-gray-900">{m.displayName}</td>
                         <td className="px-4 py-2 text-gray-600">{m.phone || "-"}</td>
                         <td className="px-4 py-2">{m.count}회</td>
+                        <td className="px-4 py-2 text-gray-700">{m.selfCount}</td>
+                        <td className="px-4 py-2 text-blue-700">{m.friendCount}</td>
+                        <td className="px-4 py-2 text-amber-700">{m.adminCount}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -199,6 +244,86 @@ export function AdminStatsPanel() {
           </>
         ) : (
           <p className="text-gray-500">회원 집계를 불러올 수 없습니다.</p>
+        )}
+      </div>
+
+      {/* 기간별 예약 상세 (예약 구분) */}
+      <div className="rounded-xl bg-white p-6 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-900">예약 상세 내역</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              선택 기간({from} ~ {to}) 예약을 누가 했는지 표시합니다. (본인 / 친구 단체예약 / 관리자)
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {BOOKED_BY_FILTERS.map((f) => {
+              const count =
+                f.id === "ALL"
+                  ? details?.length ?? 0
+                  : details?.filter((d) => d.bookedByType === f.id).length ?? 0;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setDetailFilter(f.id)}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium ${
+                    detailFilter === f.id
+                      ? "bg-primary-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {f.label} {count}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {details === null ? (
+          <p className="text-sm text-gray-500">예약 내역을 불러올 수 없습니다.</p>
+        ) : (
+          (() => {
+            const rows =
+              detailFilter === "ALL"
+                ? details
+                : details.filter((d) => d.bookedByType === detailFilter);
+            if (rows.length === 0) {
+              return <p className="text-sm text-gray-500">해당 예약이 없습니다.</p>;
+            }
+            return (
+              <div className="max-h-[480px] overflow-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="sticky top-0 border-b bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">날짜</th>
+                      <th className="px-4 py-2 font-medium">시간</th>
+                      <th className="px-4 py-2 font-medium">회원 (동/이름)</th>
+                      <th className="px-4 py-2 font-medium">예약 구분</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {rows.map((r) => (
+                      <tr key={r.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 text-gray-700">{r.date}</td>
+                        <td className="px-4 py-2 text-gray-700">{r.time}</td>
+                        <td className="px-4 py-2 font-medium text-gray-900">{r.displayName}</td>
+                        <td className="px-4 py-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                              BOOKED_BY_BADGE[r.bookedByType]
+                            }`}
+                          >
+                            {r.bookedByLabel}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()
         )}
       </div>
 

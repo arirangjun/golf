@@ -387,7 +387,7 @@ def admin_list_reservations(
 def admin_create_reservation(
     body: AdminCreateReservationBody,
     db: DbSession,
-    _admin: SessionUser = Depends(admin_user),
+    admin: SessionUser = Depends(admin_user),
 ):
     return create_reservation(
         db,
@@ -395,6 +395,7 @@ def admin_create_reservation(
         target=parse_date_input(body.date),
         start_hour=body.startHour,
         is_admin=True,
+        created_by_id=admin.id,
     )
 
 
@@ -482,6 +483,18 @@ def admin_stats(
     to_date = parse_date_input(to) if to else now_kst().date()
     from_date = parse_date_input(from_) if from_ else to_date - timedelta(days=30)
     return get_reservation_stats(db, from_date, to_date)
+
+
+@router.get("/stats/reservations")
+def admin_stats_reservations(
+    db: DbSession,
+    from_: str | None = Query(None, alias="from"),
+    to: str | None = Query(None),
+    _admin: SessionUser = Depends(admin_user),
+):
+    to_date = parse_date_input(to) if to else now_kst().date()
+    from_date = parse_date_input(from_) if from_ else to_date - timedelta(days=30)
+    return {"reservations": get_reservation_export_rows(db, from_date, to_date)}
 
 
 @router.get("/stats/members")

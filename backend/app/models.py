@@ -60,6 +60,8 @@ class Reservation(Base):
     isSameDayBooking: Mapped[bool] = mapped_column(Boolean, default=False)
     groupId: Mapped[str | None] = mapped_column(String(191), nullable=True, default=None)
     organizerId: Mapped[str | None] = mapped_column(String(191), nullable=True, default=None)
+    # 예약을 실제로 생성한 계정 (본인/단체 주최자/관리자). 컬럼 추가 이전 예약은 None.
+    createdById: Mapped[str | None] = mapped_column(String(191), nullable=True, default=None)
     createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
     updatedAt: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), server_default=func.now(), onupdate=func.now()

@@ -328,6 +328,7 @@ def create_reservation(
     start_hour: int,
     is_admin: bool = False,
     friend_ids: list[str] | None = None,
+    created_by_id: str | None = None,
 ) -> dict:
     current = now_kst()
     date_only = to_date_only(target)
@@ -398,6 +399,7 @@ def create_reservation(
             startHour=start_hour,
             endHour=start_hour + 1,
             isSameDayBooking=mark_as_bonus,
+            createdById=created_by_id or user_id,
             # MySQL NOW()가 UTC일 수 있어, 취소 유예 판정을 위해 KST wall clock로 저장
             createdAt=now_kst().replace(tzinfo=None),
         )
@@ -503,6 +505,7 @@ def create_group_reservation(
                 isSameDayBooking=mark,
                 groupId=group_id,
                 organizerId=organizer_id,
+                createdById=organizer_id,
                 createdAt=created_at,
             )
             db.add(reservation)
@@ -631,10 +634,46 @@ def count_user_reservations_within_retention(db: Session, user_id: str) -> int:
     )
 
 
+BOOKED_BY_SELF = "SELF"
+BOOKED_BY_FRIEND = "FRIEND"
+BOOKED_BY_ADMIN = "ADMIN"
+
+
+def booked_by_type(reservation: Reservation) -> str:
+    if reservation.organizerId and reservation.organizerId != reservation.userId:
+        return BOOKED_BY_FRIEND
+    # 회원은 단체예약 외에 타인 명의로 예약할 수 없으므로, 생성자가 다르면 관리자다.
+    if reservation.createdById and reservation.createdById != reservation.userId:
+        return BOOKED_BY_ADMIN
+    return BOOKED_BY_SELF
+
+
+def _load_organizers(db: Session, reservations: list[Reservation]) -> dict[str, User]:
+    ids = {
+        r.organizerId
+        for r in reservations
+        if r.organizerId and r.organizerId != r.userId
+    }
+    if not ids:
+        return {}
+    return {u.id: u for u in db.query(User).filter(User.id.in_(ids)).all()}
+
+
+def booked_by_info(reservation: Reservation, organizers: dict[str, User]) -> dict:
+    kind = booked_by_type(reservation)
+    if kind == BOOKED_BY_FRIEND:
+        organizer = organizers.get(reservation.organizerId or "")
+        name = format_member_display(organizer.dong, organizer.name) if organizer else "알 수 없음"
+        return {"bookedByType": kind, "bookedByLabel": f"친구 {name}"}
+    if kind == BOOKED_BY_ADMIN:
+        return {"bookedByType": kind, "bookedByLabel": "관리자"}
+    return {"bookedByType": kind, "bookedByLabel": "본인"}
+
+
 def get_reservation_export_rows(
     db: Session, from_date: date, to_date: date
 ) -> list[dict]:
-    """기간별 엑셀용: 동/호수/이름/예약날짜/시간."""
+    """기간별 예약 상세: 동/호수/이름/예약날짜/시간/예약구분."""
     cutoff = retention_cutoff()
     effective_from = max(to_date_only(from_date), cutoff)
     effective_to = to_date_only(to_date)
@@ -652,16 +691,20 @@ def get_reservation_export_rows(
         .all()
     )
 
+    organizers = _load_organizers(db, reservations)
     rows: list[dict] = []
     for reservation in reservations:
         user = reservation.user
         rows.append(
             {
+                "id": reservation.id,
                 "dong": user.dong if user else "",
                 "ho": user.ho if user else "",
                 "name": user.name if user else "",
+                "displayName": format_member_display(user.dong, user.name) if user else "",
                 "date": format_date(reservation.date),
                 "time": format_hour(reservation.startHour),
+                **booked_by_info(reservation, organizers),
             }
         )
     return rows
@@ -713,18 +756,27 @@ def get_monthly_member_stats(db: Session, year: int, month: int) -> dict:
         .all()
     )
 
+    count_key = {
+        BOOKED_BY_SELF: "selfCount",
+        BOOKED_BY_FRIEND: "friendCount",
+        BOOKED_BY_ADMIN: "adminCount",
+    }
     member_map: dict[str, dict] = {}
     for reservation in reservations:
-        existing = member_map.get(reservation.userId)
-        if existing:
-            existing["count"] += 1
-        else:
-            member_map[reservation.userId] = {
+        data = member_map.get(reservation.userId)
+        if not data:
+            data = {
                 "dong": reservation.user.dong,
                 "name": reservation.user.name,
                 "phone": reservation.user.phone,
-                "count": 1,
+                "count": 0,
+                "selfCount": 0,
+                "friendCount": 0,
+                "adminCount": 0,
             }
+            member_map[reservation.userId] = data
+        data["count"] += 1
+        data[count_key[booked_by_type(reservation)]] += 1
 
     members = [
         {
@@ -734,6 +786,9 @@ def get_monthly_member_stats(db: Session, year: int, month: int) -> dict:
             "phone": format_phone(data["phone"]),
             "displayName": format_member_display(data["dong"], data["name"]),
             "count": data["count"],
+            "selfCount": data["selfCount"],
+            "friendCount": data["friendCount"],
+            "adminCount": data["adminCount"],
         }
         for user_id, data in member_map.items()
     ]

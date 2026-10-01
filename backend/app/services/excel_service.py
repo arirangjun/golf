@@ -98,14 +98,17 @@ def build_stats_export_buffer(data: dict) -> bytes:
     # 기간별 예약 상세 (동/호수/이름/예약날짜)
     detail = wb.active
     detail.title = "예약내역"
-    detail.append(["동", "호수", "이름", "예약날짜", "시간"])
+    detail.append(["동", "호수", "이름", "예약날짜", "시간", "예약구분"])
     for row in data.get("reservations") or []:
-        detail.append([row["dong"], row["ho"], row["name"], row["date"], row["time"]])
+        detail.append(
+            [row["dong"], row["ho"], row["name"], row["date"], row["time"], row["bookedByLabel"]]
+        )
     detail.column_dimensions["A"].width = 10
     detail.column_dimensions["B"].width = 10
     detail.column_dimensions["C"].width = 12
     detail.column_dimensions["D"].width = 14
     detail.column_dimensions["E"].width = 10
+    detail.column_dimensions["F"].width = 20
 
     summary = wb.create_sheet("요약")
     summary.append(["항목", "값"])
@@ -137,9 +140,18 @@ def build_stats_export_buffer(data: dict) -> bytes:
     if member_stats:
         add_sheet(
             "월별회원집계",
-            ["순위", "동", "이름(마스킹)", "휴대폰", "예약 횟수"],
+            ["순위", "동", "이름(마스킹)", "휴대폰", "예약 횟수", "본인", "친구", "관리자"],
             [
-                [idx + 1, m["dong"], m["displayName"], m["phone"], m["count"]]
+                [
+                    idx + 1,
+                    m["dong"],
+                    m["displayName"],
+                    m["phone"],
+                    m["count"],
+                    m["selfCount"],
+                    m["friendCount"],
+                    m["adminCount"],
+                ]
                 for idx, m in enumerate(member_stats["members"])
             ],
         )

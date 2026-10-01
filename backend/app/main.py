@@ -95,6 +95,8 @@ def _ensure_reservation_group_columns(engine) -> None:
             statements.append("ALTER TABLE `Reservation` ADD COLUMN `groupId` VARCHAR(191) NULL")
         if "organizerId" not in columns:
             statements.append("ALTER TABLE `Reservation` ADD COLUMN `organizerId` VARCHAR(191) NULL")
+        if "createdById" not in columns:
+            statements.append("ALTER TABLE `Reservation` ADD COLUMN `createdById` VARCHAR(191) NULL")
         if not statements:
             return
         with engine.begin() as conn:
