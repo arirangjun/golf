@@ -10,8 +10,16 @@ from app.config import settings
 from app import database
 from app.database import Base, get_engine
 from app.exceptions import ApiError, api_error_handler
-from app.models import Friendship, Reservation, SlotOverride, Suggestion, User  # noqa: F401 — register metadata
-from app.routers import admin, auth, friends, reservations, slots, suggestions
+from app.models import (  # noqa: F401 — register metadata
+    Friendship,
+    Notice,
+    NoticeDismissal,
+    Reservation,
+    SlotOverride,
+    Suggestion,
+    User,
+)
+from app.routers import admin, auth, friends, notices, reservations, slots, suggestions
 from app.services.reservation_service import delete_expired_reservations
 from app.services.seed_service import seed_default_accounts
 
@@ -234,6 +242,7 @@ app.include_router(reservations.router, prefix="/api")
 app.include_router(slots.router, prefix="/api")
 app.include_router(suggestions.router, prefix="/api")
 app.include_router(friends.router, prefix="/api")
+app.include_router(notices.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(setup_router, prefix="/api")
 

@@ -7,6 +7,7 @@ import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { LoginForm } from "@/components/LoginForm";
 import { PWAInstallButton } from "@/components/PWAInstallButton";
 import { FriendsPanel } from "@/components/FriendsPanel";
+import { NoticePopup } from "@/components/NoticePopup";
 import { PrivacyConsentForm } from "@/components/PrivacyConsentForm";
 import { PrivacyStatusPanel } from "@/components/PrivacyStatusPanel";
 import { ReservationCalendar } from "@/components/ReservationCalendar";
@@ -146,6 +147,7 @@ export function HomePage() {
       </main>
 
       <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
+      <NoticePopup />
     </div>
   );
 }

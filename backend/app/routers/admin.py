@@ -48,6 +48,14 @@ from app.services.reservation_service import (
     upsert_slot_override,
 )
 from app.services.excel_service import build_stats_export_buffer
+from app.services.notice_service import (
+    create_notice,
+    delete_notice,
+    dismissal_counts,
+    list_notices,
+    notice_to_dict,
+    update_notice,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -84,6 +92,65 @@ class SlotOverrideBody(BaseModel):
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     startHour: int = Field(ge=6, le=23)
     mode: str = Field(pattern=r"^(BLOCKED|FORCE_OPEN)$")
+
+
+class NoticeBody(BaseModel):
+    title: str = Field(min_length=1, max_length=191)
+    content: str = Field(min_length=1, max_length=5000)
+    startDate: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    endDate: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+@router.get("/notices")
+def admin_list_notices(db: DbSession, _admin: SessionUser = Depends(admin_user)):
+    counts = dismissal_counts(db)
+    return {
+        "notices": [notice_to_dict(n, counts.get(n.id, 0)) for n in list_notices(db)]
+    }
+
+
+@router.post("/notices", status_code=201)
+def admin_create_notice(
+    body: NoticeBody,
+    db: DbSession,
+    _admin: SessionUser = Depends(admin_user),
+):
+    notice = create_notice(
+        db,
+        body.title,
+        body.content,
+        parse_date_input(body.startDate),
+        parse_date_input(body.endDate),
+    )
+    return {"notice": notice_to_dict(notice, 0)}
+
+
+@router.put("/notices/{notice_id}")
+def admin_update_notice(
+    notice_id: str,
+    body: NoticeBody,
+    db: DbSession,
+    _admin: SessionUser = Depends(admin_user),
+):
+    notice = update_notice(
+        db,
+        notice_id,
+        body.title,
+        body.content,
+        parse_date_input(body.startDate),
+        parse_date_input(body.endDate),
+    )
+    return {"notice": notice_to_dict(notice, dismissal_counts(db).get(notice.id, 0))}
+
+
+@router.delete("/notices/{notice_id}")
+def admin_delete_notice(
+    notice_id: str,
+    db: DbSession,
+    _admin: SessionUser = Depends(admin_user),
+):
+    delete_notice(db, notice_id)
+    return {"ok": True}
 
 
 @router.get("/users")

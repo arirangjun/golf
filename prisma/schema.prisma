@@ -31,6 +31,7 @@ model User {
   suggestions  Suggestion[]
   friendships  Friendship[]  @relation("FriendOwner")
   friendOf     Friendship[]  @relation("FriendTarget")
+  noticeDismissals NoticeDismissal[]
 
   @@index([dong, ho])
   @@index([deletedAt])
@@ -92,4 +93,29 @@ model SlotOverride {
 
   @@unique([date, startHour])
   @@index([date])
+}
+
+model Notice {
+  id         String            @id @default(cuid())
+  title      String
+  content    String            @db.Text
+  startDate  DateTime          @db.Date
+  endDate    DateTime          @db.Date
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  dismissals NoticeDismissal[]
+
+  @@index([startDate, endDate])
+}
+
+model NoticeDismissal {
+  id        String   @id @default(cuid())
+  noticeId  String
+  userId    String
+  createdAt DateTime @default(now())
+  notice    Notice   @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([noticeId, userId])
+  @@index([userId])
 }

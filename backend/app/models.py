@@ -1,8 +1,8 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
 from cuid2 import cuid_wrapper
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -130,4 +130,38 @@ class SlotOverride(Base):
     __table_args__ = (
         Index("SlotOverride_date_startHour_key", "date", "startHour", unique=True),
         Index("SlotOverride_date_idx", "date"),
+    )
+
+
+class Notice(Base):
+    """관리자 공지. startDate~endDate(KST, 양끝 포함) 동안 회원 접속 시 팝업."""
+
+    __tablename__ = "Notice"
+
+    id: Mapped[str] = mapped_column(String(191), primary_key=True, default=lambda: generate_id())
+    title: Mapped[str] = mapped_column(String(191))
+    content: Mapped[str] = mapped_column(Text)
+    startDate: Mapped[date] = mapped_column(Date)
+    endDate: Mapped[date] = mapped_column(Date)
+    createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
+    updatedAt: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (Index("Notice_startDate_endDate_idx", "startDate", "endDate"),)
+
+
+class NoticeDismissal(Base):
+    """회원이 '다시 보지 않기'로 확인한 공지."""
+
+    __tablename__ = "NoticeDismissal"
+
+    id: Mapped[str] = mapped_column(String(191), primary_key=True, default=lambda: generate_id())
+    noticeId: Mapped[str] = mapped_column(String(191), ForeignKey("Notice.id", ondelete="CASCADE"))
+    userId: Mapped[str] = mapped_column(String(191), ForeignKey("User.id", ondelete="CASCADE"))
+    createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
+
+    __table_args__ = (
+        Index("NoticeDismissal_noticeId_userId_key", "noticeId", "userId", unique=True),
+        Index("NoticeDismissal_userId_idx", "userId"),
     )

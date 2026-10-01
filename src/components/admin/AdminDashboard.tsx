@@ -6,10 +6,11 @@ import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminReservationsPanel } from "@/components/admin/AdminReservationsPanel";
 import { AdminStatsPanel } from "@/components/admin/AdminStatsPanel";
+import { AdminNoticesPanel } from "@/components/admin/AdminNoticesPanel";
 import { SuggestionBoard } from "@/components/SuggestionBoard";
 import { useState } from "react";
 
-type Tab = "users" | "reservations" | "stats" | "suggestions";
+type Tab = "users" | "reservations" | "stats" | "notices" | "suggestions";
 
 export function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -20,6 +21,7 @@ export function AdminDashboard() {
     { id: "users", label: "회원 관리" },
     { id: "reservations", label: "예약 관리" },
     { id: "stats", label: "통계/집계" },
+    { id: "notices", label: "공지사항" },
     { id: "suggestions", label: "건의" },
   ];
 
@@ -57,7 +59,7 @@ export function AdminDashboard() {
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <nav className="mb-6 flex gap-2">
+        <nav className="mb-6 flex flex-wrap gap-2">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -76,6 +78,7 @@ export function AdminDashboard() {
         {tab === "users" && <AdminUsersPanel />}
         {tab === "reservations" && <AdminReservationsPanel />}
         {tab === "stats" && <AdminStatsPanel />}
+        {tab === "notices" && <AdminNoticesPanel />}
         {tab === "suggestions" && <SuggestionBoard />}
       </div>
 
