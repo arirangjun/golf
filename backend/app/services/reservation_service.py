@@ -34,7 +34,11 @@ from app.services.booking_rules import (
     retention_cutoff,
     to_date_only,
 )
-from app.services.formatting import format_member_display, format_phone
+from app.services.formatting import (
+    format_admin_reservation_label,
+    format_member_display,
+    format_phone,
+)
 
 
 @dataclass
@@ -84,6 +88,11 @@ def get_slots_for_date(
     override_map = _overrides_for_date(db, date_only)
     week_bookable = True if admin_view else can_book_date(date_only)
 
+    def member_label(user: User) -> str:
+        if admin_view:
+            return format_admin_reservation_label(user.dong, user.ho, user.name)
+        return format_member_display(user.dong, user.name)
+
     slots: list[SlotInfo] = []
     current = now_kst()
     for hour in get_all_day_hours():
@@ -96,11 +105,7 @@ def get_slots_for_date(
             operating = OPERATING_START_HOUR <= hour < OPERATING_END_HOUR
             slot_available = False
             bookable_flag = False
-            display = (
-                format_member_display(reservation.user.dong, reservation.user.name)
-                if reservation
-                else "예약불가"
-            )
+            display = member_label(reservation.user) if reservation else "예약불가"
             reservation_id = reservation.id if reservation else None
             is_mine = reservation.userId == current_user_id if reservation else None
         elif override == SlotOverrideMode.FORCE_OPEN:
@@ -108,11 +113,7 @@ def get_slots_for_date(
             operating = OPERATING_START_HOUR <= hour < OPERATING_END_HOUR
             slot_available = operating and reservation is None and week_bookable
             bookable_flag = week_bookable
-            display = (
-                format_member_display(reservation.user.dong, reservation.user.name)
-                if reservation
-                else None
-            )
+            display = member_label(reservation.user) if reservation else None
             reservation_id = reservation.id if reservation else None
             is_mine = reservation.userId == current_user_id if reservation else None
         else:
@@ -123,11 +124,7 @@ def get_slots_for_date(
             display = (
                 "청소시간"
                 if cleaning
-                else (
-                    format_member_display(reservation.user.dong, reservation.user.name)
-                    if reservation
-                    else None
-                )
+                else (member_label(reservation.user) if reservation else None)
             )
             reservation_id = None if cleaning else (reservation.id if reservation else None)
             is_mine = (

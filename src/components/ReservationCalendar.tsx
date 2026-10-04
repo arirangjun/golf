@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format, addWeeks, subWeeks, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
 import { formatDateKST, isPastSlotKST, nowKST } from "@/lib/kst";
@@ -13,6 +13,7 @@ import {
   getAllDayHours,
   parseDateInput,
 } from "@/lib/utils";
+import { createPortal } from "react-dom";
 import { StatusMessageModal } from "@/components/StatusMessageModal";
 
 interface Slot {
@@ -87,12 +88,9 @@ export function ReservationCalendar() {
     date: string;
     startHour: number;
   } | null>(null);
-  const [confirmPos, setConfirmPos] = useState<{ top: number; left: number } | null>(null);
   const [booking, setBooking] = useState(false);
   const [pendingCancel, setPendingCancel] = useState<PendingCancel | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const cellRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-  const calendarScrollRef = useRef<HTMLDivElement>(null);
 
   const fetchWeek = useCallback(async () => {
     setLoading(true);
@@ -142,7 +140,6 @@ export function ReservationCalendar() {
 
   useEffect(() => {
     setPendingBooking(null);
-    setConfirmPos(null);
   }, [weekStart]);
 
   useEffect(() => {
@@ -200,39 +197,9 @@ export function ReservationCalendar() {
     );
   };
 
-  const updateConfirmPosition = useCallback(() => {
-    if (!pendingBooking) {
-      setConfirmPos(null);
-      return;
-    }
-    const el = cellRefs.current.get(`${pendingBooking.date}-${pendingBooking.startHour}`);
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setConfirmPos({
-      top: rect.top,
-      left: rect.left + rect.width / 2,
-    });
-  }, [pendingBooking]);
-
-  useEffect(() => {
-    if (!pendingBooking) {
-      setConfirmPos(null);
-      return;
-    }
-    updateConfirmPosition();
-    const scrollEl = calendarScrollRef.current;
-    window.addEventListener("resize", updateConfirmPosition);
-    scrollEl?.addEventListener("scroll", updateConfirmPosition, { passive: true });
-    return () => {
-      window.removeEventListener("resize", updateConfirmPosition);
-      scrollEl?.removeEventListener("scroll", updateConfirmPosition);
-    };
-  }, [pendingBooking, updateConfirmPosition, weekDays]);
-
   const closeBookingConfirm = () => {
     if (booking) return;
     setPendingBooking(null);
-    setConfirmPos(null);
   };
 
   const toggleFriend = (friendUserId: string) => {
@@ -289,18 +256,12 @@ export function ReservationCalendar() {
         return;
       }
 
-      if (!confirm(`${date} ${formatHour(slot.startHour)} 예약을 취소하시겠습니까?`)) return;
-      const res = await fetch(`/api/reservations?id=${slot.reservationId}`, {
-        method: "DELETE",
+      setPendingCancel({
+        id: slot.reservationId,
+        date,
+        startHour: slot.startHour,
+        isGroup: false,
       });
-      const data = await res.json();
-      if (res.ok) {
-        setMessage({ type: "success", text: "예약이 취소되었습니다." });
-        fetchWeek();
-        fetchReservations();
-      } else {
-        setMessage({ type: "error", text: data.error?.message ?? "취소 실패" });
-      }
       return;
     }
 
@@ -336,7 +297,6 @@ export function ReservationCalendar() {
       const data = await res.json();
       if (res.ok) {
         setPendingBooking(null);
-        setConfirmPos(null);
         setMessage({
           type: "success",
           text: groupMode ? "단체 예약이 완료되었습니다." : "예약이 완료되었습니다.",
@@ -361,17 +321,18 @@ export function ReservationCalendar() {
     setCancelling(true);
     setMessage(null);
     try {
-      const res = await fetch(
-        `/api/reservations?id=${pendingCancel.id}&scope=${scope}`,
-        { method: "DELETE" }
-      );
+      const url = pendingCancel.isGroup
+        ? `/api/reservations?id=${pendingCancel.id}&scope=${scope}`
+        : `/api/reservations?id=${pendingCancel.id}`;
+      const res = await fetch(url, { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
         setPendingCancel(null);
         setMessage({
           type: "success",
-          text:
-            scope === "group"
+          text: !pendingCancel.isGroup
+            ? "예약이 취소되었습니다."
+            : scope === "group"
               ? "단체 예약 전체가 취소되었습니다."
               : "본인 예약이 취소되었습니다.",
         });
@@ -385,7 +346,7 @@ export function ReservationCalendar() {
     }
   };
 
-  const handleCancel = async (id: string) => {
+  const handleCancel = (id: string) => {
     const reservation = myReservations.find((item) => item.id === id);
     if (!reservation) return;
 
@@ -419,17 +380,13 @@ export function ReservationCalendar() {
       return;
     }
 
-    if (!confirm("예약을 취소하시겠습니까?")) return;
-    setMessage(null);
-    const res = await fetch(`/api/reservations?id=${id}`, { method: "DELETE" });
-    const data = await res.json();
-    if (res.ok) {
-      setMessage({ type: "success", text: "예약이 취소되었습니다." });
-      fetchWeek();
-      fetchReservations();
-    } else {
-      setMessage({ type: "error", text: data.error?.message ?? "취소 실패" });
-    }
+    setPendingCancel({
+      id: reservation.id,
+      date: reservation.date,
+      startHour: reservation.startHour,
+      timeLabel: reservation.timeLabel,
+      isGroup: false,
+    });
   };
 
   const getCellClass = (date: string, slot: Slot | undefined) => {
@@ -597,7 +554,6 @@ export function ReservationCalendar() {
           <p className="py-12 text-center text-gray-500">로딩 중...</p>
         ) : (
           <div
-            ref={calendarScrollRef}
             className="max-h-[600px] overflow-auto rounded-xl border border-gray-200"
             onMouseLeave={() => setHoverRange(null)}
           >
@@ -643,11 +599,6 @@ export function ReservationCalendar() {
                       <button
                         key={`${day.date}-${hour}`}
                         type="button"
-                        ref={(el) => {
-                          const key = `${day.date}-${hour}`;
-                          if (el) cellRefs.current.set(key, el);
-                          else cellRefs.current.delete(key);
-                        }}
                         disabled={!clickable || booking}
                         onMouseEnter={() => {
                           if (pendingBooking) return;
@@ -702,113 +653,134 @@ export function ReservationCalendar() {
         )}
       </div>
 
-      {pendingBooking && confirmPos && (
-        <>
+      {pendingBooking &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            className="fixed inset-0 z-[55]"
+            className="fixed inset-0 z-[80] overflow-y-auto bg-black/40"
             onClick={closeBookingConfirm}
-            aria-hidden="true"
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="booking-confirm-title"
-            className="fixed z-[60] w-[min(18rem,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-full rounded-xl border border-primary-200 bg-white p-3 shadow-xl"
-            style={{ top: confirmPos.top - 10, left: confirmPos.left }}
-            onClick={(e) => e.stopPropagation()}
           >
-            <div className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-8 border-t-8 border-x-transparent border-t-white drop-shadow" />
-            <h3 id="booking-confirm-title" className="text-sm font-semibold text-gray-900">
-              예약할까요?
-            </h3>
-            <p className="mt-1 text-sm text-gray-700">
-              {pendingBooking.date}{" "}
-              {formatHour(pendingBooking.startHour)}
-              {groupSize > 1
-                ? `-${formatHour(pendingBooking.startHour + groupSize)}`
-                : ""}
-            </p>
-            <p className="mt-0.5 text-xs text-gray-500">
-              {groupMode
-                ? `단체 ${groupSize}명 · 연속 ${groupSize}시간 (나 + ${friends
-                    .filter((friend) => selectedFriendIds.includes(friend.friendUserId))
-                    .map((friend) => friend.name)
-                    .join(", ")})`
-                : "개인 예약 1시간"}
-            </p>
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeBookingConfirm}
-                disabled={booking}
-                className="rounded-lg border px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            <div className="flex min-h-full items-center justify-center p-4">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="booking-confirm-title"
+                className="w-full max-w-sm rounded-2xl border border-primary-200 bg-white p-5 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
               >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={confirmBooking}
-                disabled={booking}
-                className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
-              >
-                {booking ? "예약 중..." : "예약"}
-              </button>
+                <h3 id="booking-confirm-title" className="text-lg font-semibold text-gray-900">
+                  예약할까요?
+                </h3>
+                <p className="mt-2 text-sm text-gray-700">
+                  {pendingBooking.date}{" "}
+                  {formatHour(pendingBooking.startHour)}
+                  {groupSize > 1
+                    ? `-${formatHour(pendingBooking.startHour + groupSize)}`
+                    : ""}
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  {groupMode
+                    ? `단체 ${groupSize}명 · 연속 ${groupSize}시간 (나 + ${friends
+                        .filter((friend) => selectedFriendIds.includes(friend.friendUserId))
+                        .map((friend) => friend.name)
+                        .join(", ")})`
+                    : "개인 예약 1시간"}
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeBookingConfirm}
+                    disabled={booking}
+                    className="rounded-lg border px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmBooking}
+                    disabled={booking}
+                    className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-60"
+                  >
+                    {booking ? "예약 중..." : "예약"}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </div>,
+          document.body
+        )}
 
-      {pendingCancel && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-          onClick={closeCancelConfirm}
-        >
+      {pendingCancel &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="cancel-confirm-title"
-            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[80] overflow-y-auto bg-black/40"
+            onClick={closeCancelConfirm}
           >
-            <h3 id="cancel-confirm-title" className="text-lg font-semibold text-gray-900">
-              단체 예약 취소
-            </h3>
-            <p className="mt-2 text-sm text-gray-700">
-              {pendingCancel.date}{" "}
-              {pendingCancel.timeLabel ?? formatHour(pendingCancel.startHour)}
-            </p>
-            <p className="mt-1 text-sm text-gray-500">
-              본인 시간만 취소할지, 단체 예약 전체를 취소할지 선택해 주세요.
-            </p>
-            <div className="mt-4 space-y-2">
-              <button
-                type="button"
-                disabled={cancelling}
-                onClick={() => executeCancel("self")}
-                className="w-full rounded-lg border border-primary-200 bg-primary-50 px-3 py-2.5 text-sm font-medium text-primary-800 hover:bg-primary-100 disabled:opacity-60"
+            <div className="flex min-h-full items-center justify-center p-4">
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="cancel-confirm-title"
+                className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
               >
-                {cancelling ? "취소 중..." : "본인만 취소"}
-              </button>
-              <button
-                type="button"
-                disabled={cancelling}
-                onClick={() => executeCancel("group")}
-                className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
-              >
-                {cancelling ? "취소 중..." : "전체 취소"}
-              </button>
-              <button
-                type="button"
-                disabled={cancelling}
-                onClick={closeCancelConfirm}
-                className="w-full rounded-lg border px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-              >
-                닫기
-              </button>
+                <h3 id="cancel-confirm-title" className="text-lg font-semibold text-gray-900">
+                  {pendingCancel.isGroup ? "단체 예약 취소" : "예약 취소"}
+                </h3>
+                <p className="mt-2 text-sm text-gray-700">
+                  {pendingCancel.date}{" "}
+                  {pendingCancel.timeLabel ?? formatHour(pendingCancel.startHour)}
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  {pendingCancel.isGroup
+                    ? "본인 시간만 취소할지, 단체 예약 전체를 취소할지 선택해 주세요."
+                    : "이 예약을 취소하시겠습니까?"}
+                </p>
+                <div className="mt-4 space-y-2">
+                  {pendingCancel.isGroup ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={cancelling}
+                        onClick={() => executeCancel("self")}
+                        className="w-full rounded-lg border border-primary-200 bg-primary-50 px-3 py-2.5 text-sm font-medium text-primary-800 hover:bg-primary-100 disabled:opacity-60"
+                      >
+                        {cancelling ? "취소 중..." : "본인만 취소"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={cancelling}
+                        onClick={() => executeCancel("group")}
+                        className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+                      >
+                        {cancelling ? "취소 중..." : "전체 취소"}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={cancelling}
+                      onClick={() => executeCancel("self")}
+                      className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+                    >
+                      {cancelling ? "취소 중..." : "예약 취소"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={closeCancelConfirm}
+                    className="w-full rounded-lg border px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold text-gray-900">내 예약 목록</h2>

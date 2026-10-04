@@ -56,6 +56,15 @@ def format_member_display(dong: str, name: str) -> str:
     return f"{dong_label} {mask_name(name)}"
 
 
+def format_admin_reservation_label(dong: str, ho: str, name: str) -> str:
+    """관리자 예약현황: 동, 호수, 이름을 마스킹 없이 모두 표시."""
+    unit = format_unit(dong or "", ho or "")
+    full_name = (name or "").strip()
+    if unit and full_name:
+        return f"{unit} {full_name}"
+    return unit or full_name
+
+
 def default_member_password() -> str:
     return DEFAULT_MEMBER_PASSWORD
 

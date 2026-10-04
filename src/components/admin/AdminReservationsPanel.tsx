@@ -411,7 +411,7 @@ export function AdminReservationsPanel() {
   const getCellLabel = (_date: string, slot: Slot | undefined) => {
     if (!slot) return "";
     if (slot.reservationId && slot.displayLabel) {
-      return slot.displayLabel.slice(0, 8);
+      return slot.displayLabel;
     }
     if (slot.overrideMode === "BLOCKED") return "예약불가";
     if (slot.isCleaning) return "청소시간";
@@ -494,8 +494,8 @@ export function AdminReservationsPanel() {
           <p className="py-12 text-center text-gray-500">로딩 중...</p>
         ) : (
           <div className="max-h-[600px] overflow-auto rounded-xl border border-gray-200">
-            <div className="min-w-[640px]">
-              <div className="sticky top-0 z-20 grid grid-cols-[52px_repeat(7,1fr)] border-b bg-gray-50">
+            <div className="min-w-[1080px]">
+              <div className="sticky top-0 z-20 grid grid-cols-[52px_repeat(7,minmax(9rem,1fr))] border-b bg-gray-50">
                 <div className="sticky left-0 z-30 border-r bg-gray-50 px-1 py-2 text-center text-xs font-medium text-gray-400">
                   시간
                 </div>
@@ -515,7 +515,7 @@ export function AdminReservationsPanel() {
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="grid grid-cols-[52px_repeat(7,1fr)] border-b last:border-b-0"
+                  className="grid grid-cols-[52px_repeat(7,minmax(9rem,1fr))] border-b last:border-b-0"
                 >
                   <div className="sticky left-0 z-10 flex items-center justify-center border-r bg-gray-50 px-1 py-0 text-[11px] font-medium text-gray-500">
                     {formatHour(hour)}
@@ -536,7 +536,7 @@ export function AdminReservationsPanel() {
                             ? `${slot.displayLabel} · 클릭하여 취소`
                             : "클릭하여 예약/설정"
                         }
-                        className={`relative min-h-[28px] border-r px-0.5 py-0.5 text-[10px] transition last:border-r-0 sm:min-h-[32px] sm:text-xs ${getCellClass(day.date, slot)}`}
+                        className={`relative min-h-[44px] border-r px-1 py-1 text-[11px] leading-tight transition last:border-r-0 sm:text-xs ${getCellClass(day.date, slot)}`}
                       >
                         {!(
                           slot?.isCleaning ||
@@ -551,7 +551,7 @@ export function AdminReservationsPanel() {
                         )}
                         {label && (
                           <span
-                            className={`relative z-[1] block truncate font-medium ${
+                            className={`relative z-[1] block whitespace-normal break-keep-all text-center font-medium leading-tight ${
                               slot?.overrideMode === "BLOCKED"
                                 ? "text-gray-700"
                                 : slot?.isCleaning
