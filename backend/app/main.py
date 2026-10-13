@@ -206,7 +206,6 @@ def setup_seed():
             **result,
             "accounts": {
                 "admin": "admin@golf.com / admin1234",
-                "member": "101동 1001호 / 1",
             },
         }
     except Exception as exc:  # noqa: BLE001

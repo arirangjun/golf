@@ -1,4 +1,4 @@
-"""CLI: create tables and seed default accounts."""
+"""CLI: create tables and seed the default admin account."""
 
 import os
 import sys
@@ -12,7 +12,6 @@ def main() -> None:
     result = init_database()
     print("Seed completed:", result)
     print("  Admin: admin@golf.com / admin1234")
-    print("  Member: 101동 1001호 / password: 1")
 
 
 if __name__ == "__main__":
