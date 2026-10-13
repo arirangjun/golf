@@ -37,6 +37,7 @@ from app.services.booking_rules import (
 from app.services.formatting import (
     format_admin_reservation_label,
     format_member_display,
+    format_member_slot_label,
     format_phone,
 )
 
@@ -91,7 +92,7 @@ def get_slots_for_date(
     def member_label(user: User) -> str:
         if admin_view:
             return format_admin_reservation_label(user.dong, user.ho, user.name)
-        return format_member_display(user.dong, user.name)
+        return format_member_slot_label(user.dong, user.name)
 
     slots: list[SlotInfo] = []
     current = now_kst()
@@ -209,7 +210,7 @@ def _assert_date_and_time_bookable(
             raise ApiError(
                 "BOOKING_NOT_OPEN",
                 f"현재 예약 가능한 기간은 {format_date(bookable[0])} ~ {format_date(bookable[1])} 입니다. "
-                "주중(월~금)에는 이번 주(월~일)를 언제든 예약할 수 있습니다.",
+                "이번 주(월~일)는 언제든, 다음 주는 토요일 14:00부터 예약할 수 있습니다.",
             )
         next_open = get_next_booking_open_time(current)
         raise ApiError(

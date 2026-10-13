@@ -58,24 +58,18 @@ def get_week_range(value: date | datetime) -> tuple[date, date]:
     return monday, sunday
 
 
-def _saturday_open_time(saturday: date) -> datetime:
+def _saturday_open_time(value: date) -> datetime:
+    """value가 속한 주(월~일)의 토요일 BOOKING_OPEN_HOUR 시각."""
+    monday, _ = get_week_range(value)
+    saturday = monday + timedelta(days=WEEKDAY_SATURDAY)
     return datetime(
         saturday.year, saturday.month, saturday.day, BOOKING_OPEN_HOUR, 0, 0, tzinfo=KST
     )
 
 
-def _previous_saturday(value: date) -> date:
-    days_back = (value.weekday() - WEEKDAY_SATURDAY) % 7
-    if days_back == 0:
-        return value
-    return value - timedelta(days=days_back)
-
-
-def _next_saturday(value: date) -> date:
-    days_ahead = (WEEKDAY_SATURDAY - value.weekday()) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    return value + timedelta(days=days_ahead)
+def is_next_week_open(now: datetime | None = None) -> bool:
+    current = now or now_kst()
+    return current >= _saturday_open_time(current.date())
 
 
 def get_currently_bookable_week_range(
@@ -83,37 +77,22 @@ def get_currently_bookable_week_range(
 ) -> tuple[date, date] | None:
     """예약 가능 기간.
 
-    - 주중(월~금): 이번 주(월~일) 상시 예약 가능
-    - 주말(토~일): 기존처럼 가장 최근 토요일 14:00에 열린 주간만 가능
+    - 이번 주(월~일)는 요일과 관계없이 항상 예약 가능
+    - 토요일 14:00부터는 다음 주(월~일)도 함께 예약 가능
     """
     current = now or now_kst()
-    today = current.date()
-
-    # Mon=0 … Fri=4 — 이번 주만
-    if today.weekday() < WEEKDAY_SATURDAY:
-        return get_week_range(today)
-
-    saturday = today if today.weekday() == WEEKDAY_SATURDAY else _previous_saturday(today)
-    open_time = _saturday_open_time(saturday)
-
-    if current < open_time:
-        saturday = saturday - timedelta(days=7)
-
-    week_start = saturday + timedelta(days=2)
-    return get_week_range(week_start)
+    monday, sunday = get_week_range(current.date())
+    if is_next_week_open(current):
+        sunday = sunday + timedelta(days=7)
+    return monday, sunday
 
 
 def get_next_booking_open_time(now: datetime | None = None) -> datetime:
+    """다음 주간이 열리는 시각 (토요일 14:00)."""
     current = now or now_kst()
-    today = current.date()
-
-    saturday = today if today.weekday() == WEEKDAY_SATURDAY else _next_saturday(today)
-    open_time = _saturday_open_time(saturday)
-
-    if today.weekday() == WEEKDAY_SATURDAY and current >= open_time:
-        saturday = saturday + timedelta(days=7)
-        open_time = _saturday_open_time(saturday)
-
+    open_time = _saturday_open_time(current.date())
+    if current >= open_time:
+        open_time = open_time + timedelta(days=7)
     return open_time
 
 
@@ -135,14 +114,14 @@ def format_booking_window_message(now: datetime | None = None) -> str:
         return f"예약 오픈: {next_open.month}월 {next_open.day}일 ({wd}) {next_open.strftime('%H:%M')}부터"
 
     start, end = bookable
-    if current.date().weekday() < WEEKDAY_SATURDAY:
+    if is_next_week_open(current):
         return (
             f"예약 가능: {start.month}/{start.day} ~ {end.month}/{end.day} "
-            f"(주중에는 이번 주 언제든 예약 가능)"
+            f"(이번 주 + 토요일 {BOOKING_OPEN_HOUR}:00에 열린 다음 주)"
         )
     return (
-        f"예약 가능 주간: {start.month}/{start.day} ~ {end.month}/{end.day} "
-        f"(주말: 토요일 {BOOKING_OPEN_HOUR}:00 오픈)"
+        f"예약 가능: {start.month}/{start.day} ~ {end.month}/{end.day} "
+        f"(이번 주 언제든 · 토요일 {BOOKING_OPEN_HOUR}:00에 다음 주 오픈)"
     )
 
 

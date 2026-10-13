@@ -56,6 +56,12 @@ def format_member_display(dong: str, name: str) -> str:
     return f"{dong_label} {mask_name(name)}"
 
 
+def format_member_slot_label(dong: str, name: str) -> str:
+    """회원 예약 달력용 짧은 표시: 101홍*동 ('동' 글자·공백 없음)."""
+    dong_number = dong.strip().removesuffix("동").strip()
+    return f"{dong_number}{mask_name(name)}"
+
+
 def format_admin_reservation_label(dong: str, ho: str, name: str) -> str:
     """관리자 예약현황: 동, 호수, 이름을 마스킹 없이 모두 표시."""
     unit = format_unit(dong or "", ho or "")

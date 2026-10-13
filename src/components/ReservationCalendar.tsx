@@ -434,7 +434,7 @@ export function ReservationCalendar() {
     if (slot.isCleaning) return "청소시간";
     if (slot.isMine) return "내 예약";
     if (slot.reservationId || (!slot.available && slot.displayLabel)) {
-      return slot.displayLabel?.slice(0, 6) ?? "예약";
+      return slot.displayLabel ?? "예약";
     }
     return "";
   };
@@ -503,7 +503,7 @@ export function ReservationCalendar() {
 
         <div className="mb-3 rounded-lg bg-blue-50 px-4 py-3 text-xs text-blue-800">
           {bookingWindowMessage && <p className="mb-1 font-medium">• {bookingWindowMessage}</p>}
-          <p>• 주중(월~금): 이번 주(월~일) 언제든 예약 가능 · 주말: 토요일 14:00에 다음 주 오픈</p>
+          <p>• 이번 주(월~일) 언제든 예약 가능 · 토요일 14:00에 다음 주 오픈 (주말에도 이번 주 남은 시간 예약 가능)</p>
           <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 06:00~24:00 예약 가능 (주중 09:00~10:00 청소시간 제외, 토·일·법정공휴일은 청소시간 없음)</p>
           <p>• 당일 빈 슬롯: 주간 예약과 별도로 추가 1회 예약 가능</p>
           <p>• {formatHour(NEXT_DAY_BONUS_START_HOUR)} 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
