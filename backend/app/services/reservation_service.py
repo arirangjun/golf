@@ -302,21 +302,43 @@ def _resolve_mark_as_bonus(
     is_admin: bool,
     display_name: str | None = None,
 ) -> bool:
+    """추가예약 대상(당일 / 20시 이후 내일)이면 기본예약 사용 여부와 관계없이 추가예약을 먼저 쓴다.
+
+    해당 날짜 추가예약을 이미 썼으면 남은 주간 기본예약으로 처리한다.
+    """
     if is_admin:
         return False
     prefix = f"{display_name}님은 " if display_name else ""
-    weekly_used = count_weekly_reservations(db, user_id, date_only) >= 1
-    if is_next_day_bonus_booking_allowed(date_only, current):
-        return True
-    if is_same_day_extra_booking_allowed(date_only, current) and weekly_used:
-        return True
-    if weekly_used:
-        raise ApiError(
-            "WEEKLY_LIMIT",
-            f"{prefix}이번 주(월~일) 기본 예약은 1회만 가능합니다. "
-            f"당일 빈 슬롯은 추가 1회, {format_hour(NEXT_DAY_BONUS_START_HOUR)} 이후 내일 슬롯은 추가 1회 예약할 수 있습니다.",
+    same_day = is_same_day_extra_booking_allowed(date_only, current)
+    bonus_window = same_day or is_next_day_bonus_booking_allowed(date_only, current)
+    bonus_used = bonus_window and (
+        db.query(Reservation)
+        .filter(
+            Reservation.userId == user_id,
+            Reservation.isSameDayBooking.is_(True),
+            func.date(Reservation.date) == date_only,
         )
-    return False
+        .count()
+        >= 1
+    )
+    if bonus_window and not bonus_used:
+        return True
+
+    weekly_used = count_weekly_reservations(db, user_id, date_only) >= 1
+    if not weekly_used:
+        return False
+
+    if bonus_window:
+        kind = "당일" if same_day else "내일"
+        raise ApiError(
+            "BONUS_LIMIT",
+            f"{prefix}{kind} 추가 예약과 이번 주 기본 예약을 모두 사용했습니다.",
+        )
+    raise ApiError(
+        "WEEKLY_LIMIT",
+        f"{prefix}이번 주(월~일) 기본 예약은 1회만 가능합니다. "
+        f"당일 빈 슬롯은 추가 1회, {format_hour(NEXT_DAY_BONUS_START_HOUR)} 이후 내일 슬롯은 추가 1회 예약할 수 있습니다.",
+    )
 
 
 def create_reservation(

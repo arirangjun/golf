@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { format, addWeeks, subWeeks, parseISO } from "date-fns";
+import { format, addDays, addWeeks, subWeeks, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
 import { formatDateKST, isPastSlotKST, nowKST } from "@/lib/kst";
 import {
@@ -389,6 +389,16 @@ export function ReservationCalendar() {
     });
   };
 
+  const isBonusDate = (date: string) => {
+    const now = nowKST();
+    const today = formatDateKST(now);
+    const inWindow =
+      date === today ||
+      (now.getHours() >= NEXT_DAY_BONUS_START_HOUR && date === formatDateKST(addDays(now, 1)));
+    if (!inWindow) return false;
+    return !myReservations.some((r) => r.date === date && r.isSameDayBooking);
+  };
+
   const getCellClass = (date: string, slot: Slot | undefined) => {
     if (!slot) return "bg-gray-50";
     if (slot.isCleaning) {
@@ -426,6 +436,9 @@ export function ReservationCalendar() {
         : "bg-gray-50 cursor-not-allowed";
     }
     if (past) return "slot-past bg-gray-50 cursor-not-allowed";
+    if (isBonusDate(date)) {
+      return "bg-sky-50 border-sky-200 hover:bg-sky-100 hover:border-sky-300 cursor-pointer";
+    }
     return "bg-white hover:bg-primary-50 hover:border-primary-300 cursor-pointer";
   };
 
@@ -489,6 +502,10 @@ export function ReservationCalendar() {
             <span className="inline-block h-3 w-3 rounded border bg-red-50" /> 예약됨
           </span>
           <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded border bg-sky-50 border-sky-200" />{" "}
+            추가예약 구간
+          </span>
+          <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded border bg-amber-50 border-amber-200" />{" "}
             청소시간
           </span>
@@ -505,8 +522,9 @@ export function ReservationCalendar() {
           {bookingWindowMessage && <p className="mb-1 font-medium">• {bookingWindowMessage}</p>}
           <p>• 이번 주(월~일) 언제든 예약 가능 · 토요일 14:00에 다음 주 오픈 (주말에도 이번 주 남은 시간 예약 가능)</p>
           <p>• 주간(월~일) 기본 예약: 최대 1회 (1시간) · 06:00~24:00 예약 가능 (주중 09:00~10:00 청소시간 제외, 토·일·법정공휴일은 청소시간 없음)</p>
-          <p>• 당일 빈 슬롯: 주간 예약과 별도로 추가 1회 예약 가능</p>
-          <p>• {formatHour(NEXT_DAY_BONUS_START_HOUR)} 이후: 내일 날짜 슬롯 추가 1회 예약 가능 (주간 제한 무시, 예약 오픈 주간 내)</p>
+          <p>• 당일 빈 슬롯: 기본 예약 사용 여부와 관계없이 추가 예약 1회로 먼저 처리</p>
+          <p>• {formatHour(NEXT_DAY_BONUS_START_HOUR)} 이후 내일 날짜 슬롯: 기본 예약 사용 여부와 관계없이 추가 예약 1회로 먼저 처리 (예약 오픈 주간 내)</p>
+          <p>• 해당 날짜 추가 예약을 이미 사용했다면 남은 주간 기본 예약으로 처리</p>
           <p>• 단체 예약: 친구를 선택한 인원수만큼 연속 시간을 한 번에 예약 (본인 포함 최대 {MAX_GROUP_SIZE}명) · 취소 시 본인만/전체 선택 가능</p>
           <p>• 취소: 예약 후 10분 이내(예약 시간·당일 여부 무관), 또는 예약 전날 {formatHour(CANCEL_DEADLINE_HOUR_DAY_BEFORE)} 이전 · 내 예약 셀 클릭으로 취소</p>
         </div>
