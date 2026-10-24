@@ -1,4 +1,4 @@
-const CACHE_NAME = "golf-member-v17";
+const CACHE_NAME = "golf-member-v18";
 const STATIC_ASSETS = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -21,6 +21,9 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname === "/sw.js") return;
+
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
       fetch(request).catch(() =>
@@ -33,32 +36,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // HTML/문서: 네트워크 우선 — 배포 직후 반영
-  if (request.mode === "navigate" || request.destination === "document") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || Response.error()))
-    );
-    return;
-  }
-
+  // 설치형 앱이 예전 화면을 계속 쓰지 않도록, 문서는 물론 스크립트도 네트워크를 먼저 본다.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const networked = fetch(request).then((response) => {
+    fetch(request)
+      .then((response) => {
         if (request.method === "GET" && response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return response;
-      });
-      return cached || networked;
-    })
+      })
+      .catch(() => caches.match(request).then((cached) => cached || Response.error()))
   );
 });

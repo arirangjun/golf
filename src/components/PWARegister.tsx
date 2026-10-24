@@ -13,7 +13,22 @@ export function PWARegister() {
     const swUrl = isAdmin ? "/admin/sw.js" : "/sw.js";
     const scope = isAdmin ? "/admin" : "/";
 
-    navigator.serviceWorker.register(swUrl, { scope }).catch(console.error);
+    let reloading = false;
+    const onControllerChange = () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+
+    navigator.serviceWorker
+      .register(swUrl, { scope })
+      .then((registration) => registration.update())
+      .catch(console.error);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+    };
   }, [pathname]);
 
   return null;

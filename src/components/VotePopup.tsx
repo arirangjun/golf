@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { VoteResultBars, type VoteResults } from "@/components/VoteResultBars";
 
 type Choice = "AGREE" | "DISAGREE" | "UNSURE";
@@ -15,6 +16,11 @@ interface VoteStatus {
 }
 
 const SESSION_KEY = "golf-vote-later";
+
+function isVotePeriodNow() {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  return today >= "2026-10-24" && today <= "2026-10-29";
+}
 
 const OPTIONS: { id: Choice; title: string; text: string }[] = [
   {
@@ -41,20 +47,26 @@ export function VotePopup() {
   const [choice, setChoice] = useState<Choice | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [mounted, setMounted] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/votes/app-intro");
-      if (!res.ok) return;
+      const res = await fetch("/api/votes/app-intro", { cache: "no-store" });
+      if (!res.ok) {
+        setError("투표 정보를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.");
+        return;
+      }
       const data = (await res.json()) as VoteStatus;
       setStatus(data);
       setChoice(data.myChoice);
+      setError("");
     } catch {
-      // ignore
+      setError("투표 정보를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.");
     }
   }, []);
 
   useEffect(() => {
+    setMounted(true);
     load();
     try {
       setHidden(sessionStorage.getItem(SESSION_KEY) === "1");
@@ -63,8 +75,10 @@ export function VotePopup() {
     }
   }, [load]);
 
-  if (!status?.open || hidden) return null;
-  if (status.voted && !justVoted) return null;
+  if (!mounted || hidden) return null;
+  if (status && !status.open) return null;
+  if (status?.voted && !justVoted) return null;
+  if (!status && !isVotePeriodNow()) return null;
 
   const submit = async () => {
     if (!choice || saving) return;
@@ -100,8 +114,8 @@ export function VotePopup() {
     setHidden(true);
   };
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex h-[100dvh] items-center justify-center bg-black/40 p-4">
       <div
         role="dialog"
         aria-modal="true"
@@ -113,7 +127,9 @@ export function VotePopup() {
           <h2 id="vote-popup-title" className="mt-1 text-lg font-semibold text-gray-900">
             골프예약 어플 도입에 관한 회원 찬반투표
           </h2>
-          <p className="mt-1 text-xs text-gray-400">{status.startDate} ~ {status.endDate}</p>
+          <p className="mt-1 text-xs text-gray-400">
+            {status ? `${status.startDate} ~ ${status.endDate}` : "2026-10-24 ~ 2026-10-29"}
+          </p>
         </div>
 
         <div className="space-y-4 overflow-y-auto px-6 py-4 text-sm leading-relaxed text-gray-700">
@@ -148,14 +164,14 @@ export function VotePopup() {
               <label
                 key={option.id}
                 className={`flex gap-3 rounded-xl border p-3 ${
-                  status.voted ? "cursor-default" : "cursor-pointer"
+                  status?.voted ? "cursor-default" : "cursor-pointer"
                 } ${choice === option.id ? "border-primary-500 bg-primary-50" : "border-gray-200"}`}
               >
                 <input
                   type="radio"
                   name="app-intro-vote"
                   checked={choice === option.id}
-                  disabled={status.voted}
+                  disabled={Boolean(status?.voted)}
                   onChange={() => setChoice(option.id)}
                   className="mt-1"
                 />
@@ -174,19 +190,21 @@ export function VotePopup() {
 
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-          {status.voted && (
+          {status?.voted && (
             <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
               투표가 완료되었습니다. 회원당 1회만 참여할 수 있습니다.
             </p>
           )}
 
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <VoteResultBars results={status.results} />
-          </div>
+          {status && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <VoteResultBars results={status.results} />
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 border-t px-6 py-4">
-          {status.voted ? (
+          {status?.voted ? (
             <button
               type="button"
               onClick={() => setHidden(true)}
@@ -215,7 +233,8 @@ export function VotePopup() {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

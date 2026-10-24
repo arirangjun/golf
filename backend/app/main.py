@@ -33,6 +33,7 @@ def init_database() -> dict:
     _ensure_user_deleted_at_column(engine)
     _ensure_user_consent_columns(engine)
     _ensure_reservation_group_columns(engine)
+    _ensure_app_intro_vote_table(engine)
     assert database.SessionLocal is not None
     db = database.SessionLocal()
     try:
@@ -82,6 +83,37 @@ def _ensure_user_consent_columns(engine) -> None:
         print("Added User privacy consent columns")
     except Exception as exc:  # noqa: BLE001
         print(f"Warning: ensure User consent columns failed: {type(exc).__name__}: {exc!r}")
+
+
+def _ensure_app_intro_vote_table(engine) -> None:
+    """create_all can miss a new table if startup previously failed partway."""
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        names = {name.lower() for name in inspector.get_table_names()}
+        if "appintrovote" in names:
+            return
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS `AppIntroVote` (
+                        `id` VARCHAR(191) NOT NULL,
+                        `userId` VARCHAR(191) NOT NULL,
+                        `choice` ENUM('AGREE', 'DISAGREE', 'UNSURE') NOT NULL,
+                        `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (`id`),
+                        UNIQUE KEY `AppIntroVote_userId_key` (`userId`),
+                        CONSTRAINT `AppIntroVote_userId_fkey`
+                            FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE
+                    )
+                    """
+                )
+            )
+        print("Added AppIntroVote table")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: ensure AppIntroVote failed: {type(exc).__name__}: {exc!r}")
 
 
 def _ensure_reservation_group_columns(engine) -> None:

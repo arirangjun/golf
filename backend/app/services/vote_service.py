@@ -25,13 +25,15 @@ def is_vote_open(today: date | None = None) -> bool:
 
 def vote_results(db: Session) -> dict:
     rows = db.query(AppIntroVote.choice, func.count(AppIntroVote.id)).group_by(AppIntroVote.choice).all()
-    counts = {VoteChoice.AGREE: 0, VoteChoice.DISAGREE: 0, VoteChoice.UNSURE: 0}
+    counts = {"AGREE": 0, "DISAGREE": 0, "UNSURE": 0}
     for choice, count in rows:
-        counts[choice] = int(count)
+        key = choice.value if isinstance(choice, VoteChoice) else str(choice)
+        if key in counts:
+            counts[key] = int(count)
     return {
-        "agree": counts[VoteChoice.AGREE],
-        "disagree": counts[VoteChoice.DISAGREE],
-        "unsure": counts[VoteChoice.UNSURE],
+        "agree": counts["AGREE"],
+        "disagree": counts["DISAGREE"],
+        "unsure": counts["UNSURE"],
         "total": sum(counts.values()),
     }
 
