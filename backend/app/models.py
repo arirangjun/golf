@@ -153,6 +153,25 @@ class Notice(Base):
     __table_args__ = (Index("Notice_startDate_endDate_idx", "startDate", "endDate"),)
 
 
+class VoteChoice(str, enum.Enum):
+    AGREE = "AGREE"
+    DISAGREE = "DISAGREE"
+    UNSURE = "UNSURE"
+
+
+class AppIntroVote(Base):
+    """골프예약 어플 도입 찬반. 회원당 1표."""
+
+    __tablename__ = "AppIntroVote"
+
+    id: Mapped[str] = mapped_column(String(191), primary_key=True, default=lambda: generate_id())
+    userId: Mapped[str] = mapped_column(String(191), ForeignKey("User.id", ondelete="CASCADE"))
+    choice: Mapped[VoteChoice] = mapped_column(Enum(VoteChoice))
+    createdAt: Mapped[datetime] = mapped_column(DateTime(timezone=False), server_default=func.now())
+
+    __table_args__ = (Index("AppIntroVote_userId_key", "userId", unique=True),)
+
+
 class NoticeDismissal(Base):
     """회원이 '다시 보지 않기'로 확인한 공지."""
 

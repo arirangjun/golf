@@ -7,10 +7,11 @@ import { AdminUsersPanel } from "@/components/admin/AdminUsersPanel";
 import { AdminReservationsPanel } from "@/components/admin/AdminReservationsPanel";
 import { AdminStatsPanel } from "@/components/admin/AdminStatsPanel";
 import { AdminNoticesPanel } from "@/components/admin/AdminNoticesPanel";
+import { AdminVotePanel } from "@/components/admin/AdminVotePanel";
 import { SuggestionBoard } from "@/components/SuggestionBoard";
 import { useState } from "react";
 
-type Tab = "users" | "reservations" | "stats" | "notices" | "suggestions";
+type Tab = "users" | "reservations" | "stats" | "notices" | "votes" | "suggestions";
 
 export function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -22,6 +23,7 @@ export function AdminDashboard() {
     { id: "reservations", label: "예약 관리" },
     { id: "stats", label: "통계/집계" },
     { id: "notices", label: "공지사항" },
+    { id: "votes", label: "찬반투표" },
     { id: "suggestions", label: "건의" },
   ];
 
@@ -79,6 +81,7 @@ export function AdminDashboard() {
         {tab === "reservations" && <AdminReservationsPanel />}
         {tab === "stats" && <AdminStatsPanel />}
         {tab === "notices" && <AdminNoticesPanel />}
+        {tab === "votes" && <AdminVotePanel />}
         {tab === "suggestions" && <SuggestionBoard />}
       </div>
 

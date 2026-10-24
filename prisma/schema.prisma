@@ -32,6 +32,7 @@ model User {
   friendships  Friendship[]  @relation("FriendOwner")
   friendOf     Friendship[]  @relation("FriendTarget")
   noticeDismissals NoticeDismissal[]
+  appIntroVote     AppIntroVote?
 
   @@index([dong, ho])
   @@index([deletedAt])
@@ -119,4 +120,18 @@ model NoticeDismissal {
 
   @@unique([noticeId, userId])
   @@index([userId])
+}
+
+enum VoteChoice {
+  AGREE
+  DISAGREE
+  UNSURE
+}
+
+model AppIntroVote {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  choice    VoteChoice
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

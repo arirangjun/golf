@@ -8,6 +8,7 @@ import { LoginForm } from "@/components/LoginForm";
 import { PWAInstallButton } from "@/components/PWAInstallButton";
 import { FriendsPanel } from "@/components/FriendsPanel";
 import { NoticePopup } from "@/components/NoticePopup";
+import { VotePopup, VoteStatusCard } from "@/components/VotePopup";
 import { PrivacyConsentForm } from "@/components/PrivacyConsentForm";
 import { PrivacyStatusPanel } from "@/components/PrivacyStatusPanel";
 import { ReservationCalendar } from "@/components/ReservationCalendar";
@@ -133,6 +134,7 @@ export function HomePage() {
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6">
         {tab === "booking" ? (
           <>
+            <VoteStatusCard />
             <FriendsPanel friendSearchEnabled={Boolean(user.friendSearchConsent)} />
             <ReservationCalendar />
             <SuggestionBoard />
@@ -148,6 +150,7 @@ export function HomePage() {
 
       <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
       <NoticePopup />
+      <VotePopup />
     </div>
   );
 }
